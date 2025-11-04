@@ -55,22 +55,58 @@ Full-Stack разработчик с фокусом на .NET и уверенн�
 
 ---
 
-## 🛠 Tech Stack (Разделено по стеку)
+## 🛠 Tech Stack
 
 ### 💡 C# / .NET
-C#, .NET 6 / .NET 8, .NET Framework 4.5+, ASP.NET, ASP.NET Core, WebForms,  
-EF Core, Dapper, LinqToDb, AutoMapper, WCF, Identity, SignalR, SqlTableDependency,  
-Serilog, FastReport, DevExpress, xUnit, MS SQL Server
+
+![C#](https://img.shields.io/badge/C%23-%23239120.svg?style=for-the-badge\&logo=csharp\&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge\&logo=.net\&logoColor=white)
+![.NET Framework](https://img.shields.io/badge/.NET%20Framework-007ACC?style=for-the-badge\&logo=.net\&logoColor=white)
+![ASP.NET](https://img.shields.io/badge/ASP.NET-512BD4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![EF Core](https://img.shields.io/badge/EF%20Core-512BD4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![Dapper](https://img.shields.io/badge/Dapper-0078D4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![AutoMapper](https://img.shields.io/badge/AutoMapper-512BD4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![WCF](https://img.shields.io/badge/WCF-512BD4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![SignalR](https://img.shields.io/badge/SignalR-512BD4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![Identity](https://img.shields.io/badge/Identity-512BD4?style=for-the-badge\&logo=dot-net\&logoColor=white)
+![SqlServer](https://img.shields.io/badge/MS%20SQL%20Server-CC2927?style=for-the-badge\&logo=microsoft%20sql%20server\&logoColor=white)
+![Serilog](https://img.shields.io/badge/Serilog-5C2D91?style=for-the-badge\&logoColor=white)
+![FastReport](https://img.shields.io/badge/FastReport-512BD4?style=for-the-badge\&logoColor=white)
+![DevExpress](https://img.shields.io/badge/DevExpress-0078D4?style=for-the-badge\&logoColor=white)
+![xUnit](https://img.shields.io/badge/xUnit-512BD4?style=for-the-badge\&logoColor=white)
+![WebForms](https://img.shields.io/badge/WebForms-512BD4?style=for-the-badge\&logoColor=white)
+
+---
 
 ### 🎨 Frontend (JS/TS)
-JavaScript / TypeScript, React, Tanstack-Query, Zustand, Axios/Fetch API,  
-Ant Design, Tailwind CSS, Less
+
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge\&logo=javascript\&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge\&logo=typescript\&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge\&logo=react\&logoColor=61DAFB)
+![Zustand](https://img.shields.io/badge/Zustand-20232A?style=for-the-badge\&logoColor=white)
+![TanStack Query](https://img.shields.io/badge/TanStack_Query-FF4154?style=for-the-badge\&logoColor=white)
+![Axios](https://img.shields.io/badge/Axios-5A29E4?style=for-the-badge\&logoColor=white)
+![Fetch API](https://img.shields.io/badge/FetchAPI-5A29E4?style=for-the-badge\&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-38B2AC?style=for-the-badge\&logo=tailwind-css\&logoColor=white)
+![Ant Design](https://img.shields.io/badge/Ant%20Design-0170FE?style=for-the-badge\&logoColor=white)
+![Less](https://img.shields.io/badge/Less-2B4C80?style=for-the-badge\&logo=less\&logoColor=white)
+
+---
 
 ### 🏗️ Architecture
-Clean Architecture, CQRS *(в процессе)*, Event Sourcing *(в процессе)*
+
+![Clean Architecture](https://img.shields.io/badge/Clean_Architecture-5C2D91?style=for-the-badge\&logoColor=white)
+![CQRS](https://img.shields.io/badge/CQRS-In_Progress-5C2D91?style=for-the-badge\&logoColor=white)
+![Event Sourcing](https://img.shields.io/badge/Event_Sourcing-In_Progress-5C2D91?style=for-the-badge\&logoColor=white)
+
+---
 
 ### 🧰 Tools / DevOps
-Git, Docker, Linux / Windows
+
+![Git](https://img.shields.io/badge/Git-F05033?style=for-the-badge\&logo=git\&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge\&logo=docker\&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge\&logo=linux\&logoColor=black)
+![Windows](https://img.shields.io/badge/Windows-0078D4?style=for-the-badge\&logo=windows\&logoColor=white)
 
 ---
 

@@ -147,7 +147,7 @@ Full-Stack разработчик с фокусом на экосистему .N
 
 | Годы | Тип образования| Направление | Профиль | Учреждение | Сертификат |
 |---|---|---|---|---|---|
-2026 | Повышение квалификации | Reinforcement Learning | — | [OTUS](https://otus.ru/lessons/reinforcement-learning-cours/) |(🔗)[ссылка на сертификат ](https://disk.yandex.ru/i/FUy1jxyfUZIUIw)
+2026 | Повышение квалификации | Reinforcement Learning | — | [OTUS](https://otus.ru/lessons/reinforcement-learning-cours/) |(🔗)[ссылка на упк](https://disk.yandex.ru/i/0LtlKFTlLeXReQ)
 2025 | Повышение квалификации | AI Learning week | — | [AI week](https://anomtl.ru/aiweek?ysclid=mn603inx81879128764) |(🔗)[ссылка на сертификат](https://disk.yandex.ru/i/RBrPV-zqF_mBUg)
 2024 | Повышение квалификации | SDP-030 Продвинутая разработка .NET | — | [ИБС](https://ibs-training.ru/) | (🔗)[ссылка на сертификат](https://disk.yandex.ru/i/hBeP35AKC65C9g)
 2022-2024 | Магистратура |  Программная инженерия  | Разработка программных комплексов и систем | [Университет Решетнева](https://www.sibsau.ru/) | —  

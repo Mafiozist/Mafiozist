@@ -1,0 +1,23 @@
+# Rust
+/core/target/
+/src-tauri/target/
+**/*.rs.bk
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# Логи и артефакты
+*.log
+
+# ОС
+.DS_Store
+Thumbs.db
+
+# Локальные данные приложения / БД (не коммитим пользовательские данные)
+*.sqlite
+*.sqlite3
+*.db

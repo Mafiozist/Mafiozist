@@ -1,0 +1,24 @@
+# devnotes-core — переносимое ядро DEVNOTES (Domain + UseCases + Infrastructure/DB + Search).
+#
+# ПОЧЕМУ отдельный крейт (а не внутри src-tauri):
+#   ядро НЕ зависит от Tauri/WebKit, поэтому компилируется и тестируется на любой машине
+#   (в т.ч. в CI без GUI-зависимостей). Оболочка src-tauri подключает этот крейт по пути
+#   и добавляет лишь тонкий IPC-слой. См. docs/04-ARCHITECTURE.md и docs/11-FILE-INDEX.md.
+[package]
+name = "devnotes-core"
+version = "0.1.0"
+edition = "2021"
+description = "Ядро DEVNOTES: локальное хранилище SQLite + FTS5, домен и сценарии"
+license = "MIT"
+
+[dependencies]
+# rusqlite с bundled: компилирует SQLite из исходников с включённым FTS5 — не зависит от системной libsqlite.
+rusqlite = { version = "0.31", features = ["bundled"] }
+# UUID v7 — сортируемые по времени идентификаторы, генерируются клиентом (нужно для офлайн-создания).
+uuid = { version = "1", features = ["v7"] }
+# time — форматирование и парсинг меток времени в UTC RFC3339 (ISO 8601).
+time = { version = "0.3", features = ["formatting", "parsing"] }
+# serde — сериализация доменных типов для IPC/экспорта.
+serde = { version = "1", features = ["derive"] }
+# thiserror — эргономичные доменные ошибки.
+thiserror = "1"

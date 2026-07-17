@@ -1,0 +1,57 @@
+# CI для DEVNOTES (см. DevNotes/docs/13-TESTING.md).
+# Запускается только при изменениях в DevNotes/**, чтобы не мешать остальному репозиторию.
+name: DevNotes CI
+
+on:
+  push:
+    paths:
+      - "DevNotes/**"
+      - ".github/workflows/devnotes-ci.yml"
+  pull_request:
+    paths:
+      - "DevNotes/**"
+      - ".github/workflows/devnotes-ci.yml"
+
+jobs:
+  core:
+    name: Ядро (Rust + SQLite/FTS5)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DevNotes/core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Формат
+        run: cargo fmt --check
+      - name: Линт
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Тесты (unit + интеграционные)
+        run: cargo test
+
+  frontend:
+    name: Фронтенд (React + Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DevNotes/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: DevNotes/app/pnpm-lock.yaml
+      - name: Установка зависимостей
+        run: pnpm install --frozen-lockfile
+      - name: Типизация
+        run: pnpm typecheck
+      - name: Тесты
+        run: pnpm test
+      - name: Сборка
+        run: pnpm build

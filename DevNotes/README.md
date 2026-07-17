@@ -180,26 +180,28 @@ DevNotes/
 
 ## Быстрый старт
 
-> ⚠️ Проект на стадии проектирования — команды ниже **плейсхолдеры** и активируются по мере реализации (см. [docs/10-ROADMAP.md](docs/10-ROADMAP.md)).
+> ✅ Реализован MVP: ядро (Rust `core/`), IPC-оболочка (`src-tauri/`), фронтенд (`app/`). Ядро и фронтенд собираются и проходят тесты (23 зелёных). Синхронизация с Я.Диском и фичи v1.0+ — по [docs/10-ROADMAP.md](docs/10-ROADMAP.md).
 
-**Предпосылки (планируемые):**
+**Предпосылки:**
 
-- Node.js `>= 20` и `pnpm` (или `npm`)
+- Node.js `>= 22` и `pnpm`
 - Rust `stable` (toolchain для Tauri 2.0)
-- Системные зависимости WebView: WebView2 (Windows) / WebKit (macOS) / WebKitGTK (Linux)
+- Системные зависимости WebView: WebView2 (Windows) / WebKit (macOS) / WebKitGTK 4.1 (Linux) — нужны только для GUI-сборки Tauri
 
 ```bash
-# 1. Клонировать
 git clone <repo-url> && cd DevNotes
 
-# 2. Установить зависимости фронтенда
-pnpm install                # placeholder
+# Ядро: тесты (работает без GUI-зависимостей)
+cd core && cargo test && cd ..
 
-# 3. Запуск в dev-режиме (Tauri + Vite)
-pnpm tauri dev              # placeholder
+# Фронтенд: установка, тесты, сборка
+cd app && pnpm install && pnpm test && pnpm build && cd ..
 
-# 4. Продакшн-сборка под текущую платформу
-pnpm tauri build           # placeholder
+# Десктоп в dev-режиме (нужен WebView; запускает Vite на :1420 + окно Tauri)
+cd src-tauri && cargo tauri dev
+
+# Продакшн-сборка под текущую платформу (требуются иконки src-tauri/icons/*)
+cd src-tauri && cargo tauri build
 ```
 
 Локальная БД SQLite создаётся при первом запуске в пользовательской app-директории; миграции применяются автоматически. Настройка синка с Яндекс.Диском — в [docs/09-YANDEX-DISK.md](docs/09-YANDEX-DISK.md).

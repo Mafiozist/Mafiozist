@@ -2,7 +2,7 @@
 
 > **Что это за файл.** Живой (постоянно обновляемый) документ текущего состояния проекта **DEVNOTES** для AI-ассистента и разработчика. Здесь зафиксированы: что за проект и на какой он стадии, карта репозитория, обязательные конвенции ведения проекта, архитектурные принципы, роли процесса, Definition of Done и журнал состояния. Читается первым при входе в проект — до внесения любых изменений. Обновляется при каждом значимом изменении (см. раздел «Конвенции»).
 
-> **Стадия:** проектирование (design). Кода приложения ещё нет — есть каркас репозитория и документация.
+> **Стадия:** реализация MVP. Ядро (Rust `devnotes-core`) + IPC-оболочка (Tauri 2) + фронтенд (React) написаны; ядро и фронтенд собираются и проходят тесты (23 зелёных). Не реализованы фичи v0.3+ (Я.Диск-синк и далее — см. `docs/10-ROADMAP.md`).
 > **Дата последнего обновления:** 2026-07-17.
 > **Язык всех документов проекта:** русский. Тон: инженерный, конкретный, без маркетинговой воды.
 
@@ -59,7 +59,7 @@
 | Даты | Хранение **UTC ISO 8601**; отображение в локальной таймзоне пользователя |
 | Слои | Domain / UseCases / Interfaces / Infrastructure (DB, Sync) / UI |
 
-**Текущий статус:** проектирование. Собираем документацию, DDL схемы, ADR, дизайн-токены. Приложение (Rust-ядро + React-UI) ещё не реализовано.
+**Текущий статус:** реализован MVP. Готово: ядро `devnotes-core` (SQLite + FTS5, домен, поиск, LWW-логика, сценарии; 18 тестов), IPC-оболочка Tauri 2, фронтенд на React (трёхпанельная раскладка, командная палитра поиска; собирается, 5 тестов). Осталось по roadmap: синхронизация с Я.Диском, версии, вложения, wiki-links, граф, шифрование, mobile.
 
 **Родословная.** Модель данных и дизайн-язык перенимаются из веб-проекта **Mafiozist/Portfolio** (.NET + React). Из Portfolio берём: иерархию Project → NoteSeries → NoteContent, теги TechTag/TechTagType, терминально-хакерскую эстетику (JetBrains Mono, акцент `#22c55e`) и дизайн-токены shadcn/ui. **Портфолио-часть** (Company, Task, ExperienceWork/ExperienceEducation) в десктоп v1 **не переносится**.
 
@@ -67,58 +67,60 @@
 
 ## 2. Карта репозитория — где что лежит
 
-Целевая структура (формируется по мере реализации; актуальный слепок — в `docs/11-FILE-INDEX.md`):
+Актуальная структура (MVP реализован; подробный слепок — в `docs/11-FILE-INDEX.md`).
+
+> **Уточнение архитектуры относительно ранних доков:** ядро вынесено в ОТДЕЛЬНЫЙ
+> крейт `core/` (`devnotes-core`), а не внутрь `src-tauri/`. ПОЧЕМУ: так ядро
+> (домен + БД + поиск + sync-логика) компилируется и тестируется без GUI/WebKit —
+> критично для CI. `src-tauri/` — только тонкий IPC-слой поверх ядра. Фронтенд
+> живёт в `app/` (а не в `src/`).
 
 ```
 DevNotes/
 ├── CLAUDE.md                  # ← этот файл: состояние проекта и конвенции
 ├── README.md                  # краткое описание для внешнего читателя
+├── .gitignore                 # target/, node_modules/, локальные *.sqlite
 ├── docs/                      # вся проектная документация (см. «Связанные документы»)
-│   ├── 00-INDEX.md            #   оглавление и маршруты чтения
-│   ├── 01-VISION.md           #   видение продукта
-│   ├── 02-SPECIFICATION.md    #   большое ТЗ
-│   ├── 03-FEATURES.md         #   каталог фич (MoSCoW)
-│   ├── 04-ARCHITECTURE.md     #   архитектура (Tauri 2 + React)
-│   ├── 05-DATA-MODEL.md       #   модель данных, SQLite DDL, FTS5
-│   ├── 06-UI-UX.md            #   дизайн-система и UI/UX
-│   ├── 07-TECH-STACK.md       #   обоснование стека
-│   ├── 08-SEARCH.md           #   быстрый поиск (FTS5/bm25)
-│   ├── 09-YANDEX-DISK.md      #   синхронизация с Яндекс.Диском
-│   ├── 10-ROADMAP.md          #   дорожная карта
-│   ├── 11-FILE-INDEX.md       #   реестр всех файлов
-│   ├── 12-GLOSSARY.md         #   глоссарий терминов
-│   ├── 13-TESTING.md          #   стратегия тестирования (unit + интеграционные)
-│   └── WORKLOG.md             #   журнал прогонов агентов
+│   ├── 00-INDEX.md … 13-TESTING.md, WORKLOG.md
 │
-├── src-tauri/                 # Rust-ядро (Tauri 2.0) — появится на стадии реализации
+├── core/                      # ✅ devnotes-core — переносимое ядро (Rust, БЕЗ Tauri)
 │   ├── Cargo.toml
-│   ├── tauri.conf.json        #   конфигурация оболочки, updater, permissions
-│   ├── migrations/            #   версионируемые SQL-миграции схемы
-│   └── src/
-│       ├── domain/            #   Domain: сущности, value objects, инварианты
-│       ├── usecases/          #   UseCases: сценарии (CRUD, поиск, синк)
-│       ├── interfaces/        #   Interfaces: порты (traits) репозиториев/сервисов
-│       ├── infrastructure/    #   Infrastructure: реализация DB (rusqlite), Sync (Я.Диск)
-│       │   ├── db/
-│       │   └── sync/
-│       └── ipc/               #   Tauri-команды (тонкий слой IPC ↔ UseCases)
+│   ├── migrations/001_init.sql   #   схема + FTS5 external content + триггеры
+│   ├── src/
+│   │   ├── lib.rs             #   модули + CoreError
+│   │   ├── domain.rs          #   Domain: Project/NoteSeries/NoteContent/типы блоков
+│   │   ├── ports.rs           #   Interfaces: Clock/IdGenerator (+ System/UuidV7)
+│   │   ├── sqlite.rs          #   Infrastructure/DB: SqliteStore, репозитории, поиск
+│   │   ├── search.rs          #   построение безопасного FTS5-запроса
+│   │   ├── sync.rs            #   LWW-разрешение конфликтов (чистая логика)
+│   │   └── service.rs         #   UseCases: NotesService (валидация + сценарии)
+│   └── tests/integration.rs   #   интеграционные тесты (реальный SQLite + FTS5)
 │
-└── src/                       # Фронтенд React 19 + TypeScript — появится на стадии реализации
-    ├── index.html
-    ├── vite.config.ts
-    ├── package.json
-    ├── tailwind.config.ts
-    └── src/
-        ├── app/               #   точка входа, роутинг, провайдеры
-        ├── domain/            #   зеркало доменных типов (TS), camelCase
-        ├── repositories/      #   repository-pattern + генераторы query-key
-        ├── features/          #   фичи: notes, search, sync, settings…
-        ├── components/ui/     #   примитивы дизайн-системы (Button, Card, Input…)
-        ├── stores/            #   Zustand-сторы
-        └── styles/            #   дизайн-токены HSL, глобальные стили
+├── src-tauri/                 # ✅ Оболочка Tauri 2 (тонкий IPC-слой)
+│   ├── Cargo.toml
+│   ├── build.rs
+│   ├── tauri.conf.json        #   окно, CSP, bundle
+│   ├── capabilities/default.json
+│   └── src/{lib.rs,main.rs}   #   IPC-команды → devnotes-core; инициализация БД
+│
+├── app/                       # ✅ Фронтенд React 19 + TypeScript + Vite + Tailwind
+│   ├── package.json, vite.config.ts, vitest.config.ts, tailwind.config.ts, tsconfig.json
+│   ├── index.html
+│   └── src/
+│       ├── main.tsx, App.tsx  #   точка входа + трёхпанельная раскладка
+│       ├── app/providers.tsx  #   TanStack Query provider
+│       ├── domain/types.ts    #   зеркало доменных типов (TS)
+│       ├── api/               #   repository-обёртки + генераторы query-key
+│       ├── lib/               #   cn(), IPC-обёртка (+ браузерный мок), тесты
+│       ├── features/          #   projects / series / content / search
+│       ├── components/ui/     #   примитивы дизайн-системы (CVA)
+│       ├── stores/            #   Zustand (uiStore)
+│       └── styles/tokens.css  #   дизайн-токены HSL (терминальная тема)
+│
+└── (repo-root) .github/workflows/devnotes-ci.yml   # CI: тесты ядра + фронтенда
 ```
 
-> На текущей стадии реально существуют `CLAUDE.md` и каталог `docs/`. Остальное — целевой каркас; факт наличия каждого файла отражается в `docs/11-FILE-INDEX.md`.
+> Реализован MVP: ядро (18 тестов), IPC-оболочка, фронтенд (сборка + 5 тестов). Не реализовано (по `docs/10-ROADMAP.md`): синхронизация с Я.Диском, версии, вложения, wiki-links/backlinks, граф, шифрование, mobile. Иконки `src-tauri/icons/*` нужно добавить перед сборкой десктоп-бандла.
 
 ---
 
@@ -261,6 +263,7 @@ flowchart TB
 
 | Дата | Что сделано | Роль |
 | --- | --- | --- |
+| 2026-07-17 | Реализован MVP. Ядро `core/` (`devnotes-core`): миграция 001 (схема + FTS5 + триггеры), домен, порты Clock/IdGenerator, `SqliteStore` (CRUD, каскады, reorder, поиск bm25/snippet), санитайзер FTS5-запроса, LWW-резолвер, `NotesService` — **9 unit + 9 интеграционных тестов зелёные**. Оболочка `src-tauri/` (Tauri 2): IPC-команды поверх ядра, инициализация БД в app_data_dir. Фронтенд `app/` (React 19 + Vite + Tailwind, дизайн-система из Portfolio): трёхпанельная раскладка, командная палитра поиска, IPC-обёртка с браузерным моком — **сборка (tsc+vite) и 5 Vitest-тестов зелёные**. Добавлен CI `.github/workflows/devnotes-ci.yml`. Уточнена структура: ядро — отдельный крейт `core/`, фронтенд — `app/`. | opus |
 | 2026-07-17 | Мульти-агентным воркфлоу (fable — постановка/критика, opus — реализация) написан комплект документации: `README.md`, 11 документов `docs/*` (видение, большое ТЗ, фичи, архитектура, модель данных, UI/UX, стек, поиск, Я.Диск, roadmap, глоссарий). Сведены нумерация и кросс-ссылки под фактические файлы; добавлены `docs/00-INDEX.md`, `docs/11-FILE-INDEX.md`, `docs/13-TESTING.md` (стратегия тестов unit+интеграционные), `docs/WORKLOG.md` (журнал прогона). Введены конвенции 3.7 (тестирование) и 3.8 (журналирование). | fable+opus |
 | 2026-07-17 | Создан каркас проекта и документация: заведён `DevNotes/`, написан `CLAUDE.md` (состояние, конвенции, роли, DoD, журнал), заложена структура `docs/` и целевая карта репозитория. Стадия — проектирование. | opus |
 

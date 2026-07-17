@@ -1,6 +1,6 @@
 # 11 — Реестр файлов (File Index)
 
-> **Что это за файл.** Кросс-справочник по каждому файлу репозитория DEVNOTES: путь, назначение, что можно менять, зависимости. Обновляется при любом создании/удалении/переименовании файла (конвенция [`../CLAUDE.md`](../CLAUDE.md) §3.1). Сейчас проект на стадии проектирования — реально существуют документация и каркас; секции кода помечены как **план** и наполняются по мере реализации.
+> **Что это за файл.** Кросс-справочник по каждому файлу репозитория DEVNOTES: путь, назначение, что можно менять, зависимости. Обновляется при любом создании/удалении/переименовании файла (конвенция [`../CLAUDE.md`](../CLAUDE.md) §3.1). Реализован MVP — ниже перечислены фактические файлы ядра (`core/`), оболочки (`src-tauri/`) и фронтенда (`app/`); нереализованное вынесено в раздел «Планируемое».
 
 ## Связанные документы
 
@@ -45,41 +45,69 @@
 
 ---
 
-## Планируемые файлы (каркас — появятся на стадии реализации)
+## Код: ядро `core/` (реализовано, `devnotes-core`)
 
-> Пути ниже — целевая структура из `../CLAUDE.md` §2 и `04-ARCHITECTURE.md`. По мере создания каждый переезжает в раздел «Существующие файлы» с заполненными полями.
+| Путь | Назначение | Слой | Можно менять |
+| --- | --- | --- | --- |
+| `core/Cargo.toml` | Манифест крейта ядра, зависимости (rusqlite bundled, uuid, time…) | — | зависимости — осознанно |
+| `core/migrations/001_init.sql` | Схема БД + FTS5 external content + триггеры индекса | Infrastructure/DB | только через новую миграцию 002+ |
+| `core/src/lib.rs` | Объявление модулей + `CoreError`/`Result` | — | при добавлении модуля |
+| `core/src/domain.rs` | Сущности Project/NoteSeries/NoteContent, типы блоков, SearchHit | Domain | синхронно со схемой |
+| `core/src/ports.rs` | Порты `Clock`/`IdGenerator` + `SystemClock`/`UuidV7Generator` | Interfaces | добавление портов |
+| `core/src/sqlite.rs` | `SqliteStore`: миграции, CRUD, каскады, reorder, FTS5-поиск | Infrastructure/DB | + методы; SQL синхронно со схемой |
+| `core/src/search.rs` | `to_fts_query` — безопасный FTS5-запрос из ввода | Domain/логика | правила токенизации |
+| `core/src/sync.rs` | `resolve` — LWW-разрешение конфликтов (чистая логика) | Domain/логика | стратегия конфликтов |
+| `core/src/service.rs` | `NotesService` — сценарии с валидацией | UseCases | бизнес-правила |
+| `core/tests/integration.rs` | 9 интеграционных тестов (реальный SQLite + FTS5) | Тесты | добавлять сценарии |
 
-### Rust-ядро `src-tauri/` (план)
+## Код: оболочка `src-tauri/` (реализовано, Tauri 2)
 
-| Путь | Назначение (план) | Слой |
+| Путь | Назначение | Можно менять |
 | --- | --- | --- |
-| `src-tauri/Cargo.toml` | Манифест Rust-крейта ядра, зависимости | — |
-| `src-tauri/tauri.conf.json` | Конфигурация оболочки: окна, updater, permissions | — |
-| `src-tauri/migrations/` | Версионируемые SQL-миграции схемы (+ FTS5) | Infrastructure/DB |
-| `src-tauri/src/domain/` | Сущности, value objects, инварианты | Domain |
-| `src-tauri/src/usecases/` | Сценарии: CRUD иерархии, поиск, синк, экспорт | UseCases |
-| `src-tauri/src/interfaces/` | Порты (traits) репозиториев и сервисов | Interfaces |
-| `src-tauri/src/infrastructure/db/` | Реализация на rusqlite + FTS5 | Infrastructure |
-| `src-tauri/src/infrastructure/sync/` | Клиент Я.Диска, oplog, конфликты | Infrastructure |
-| `src-tauri/src/ipc/` | Tauri-команды (тонкий слой IPC ↔ UseCases) | UI-граница |
-| `src-tauri/tests/` | Интеграционные тесты (реальный SQLite, sync-мок) | Тесты |
+| `src-tauri/Cargo.toml` | Манифест оболочки; зависит от `devnotes-core` по пути | зависимости |
+| `src-tauri/build.rs` | Скрипт сборки Tauri | обычно нет |
+| `src-tauri/tauri.conf.json` | Окно, CSP, bundle, dev/build-команды фронта | конфигурация окна/бандла |
+| `src-tauri/capabilities/default.json` | Разрешения (permissions) главного окна | при добавлении плагинов |
+| `src-tauri/src/lib.rs` | IPC-команды → `NotesService`; инициализация БД | + команды (тонкий слой) |
+| `src-tauri/src/main.rs` | Точка входа десктопа | обычно нет |
+| `src-tauri/icons/*` | Иконки бандла — **нужно добавить** перед сборкой | добавить ассеты |
 
-### Фронтенд `src/` (план)
+## Код: фронтенд `app/` (реализовано, React 19 + Vite)
 
-| Путь | Назначение (план) |
+| Путь | Назначение | Можно менять |
+| --- | --- | --- |
+| `app/package.json` | Скрипты (dev/build/typecheck/test) и зависимости | зависимости/скрипты |
+| `app/vite.config.ts`, `app/vitest.config.ts` | Конфигурация сборки и тестов | настройки сборки |
+| `app/tailwind.config.ts`, `app/postcss.config.js` | Tailwind + дизайн-токены | токены/тема |
+| `app/tsconfig.json` | Конфигурация TypeScript | опции компилятора |
+| `app/index.html` | HTML-обёртка (тема dark по умолчанию) | метаданные |
+| `app/src/main.tsx`, `app/src/App.tsx` | Точка входа + трёхпанельная раскладка + хоткей поиска | композиция экранов |
+| `app/src/app/providers.tsx` | Провайдер TanStack Query | настройки кэша |
+| `app/src/domain/types.ts` | Зеркало доменных типов (TS) | синхронно с `core/domain.rs` |
+| `app/src/api/notes.ts` | Repository-обёртки над IPC-командами | + вызовы |
+| `app/src/api/queryKeys.ts` | Генераторы query-key | ключи кэша |
+| `app/src/lib/cn.ts` | Утилита классов (clsx + tailwind-merge) | нет |
+| `app/src/lib/ipc.ts` | IPC-обёртка Tauri + браузерный мок бэкенда | мок синхронно с командами |
+| `app/src/lib/ipc.test.ts` | Vitest-тесты мока (5 тестов) | добавлять сценарии |
+| `app/src/stores/uiStore.ts` | Zustand: выбор проекта/серии, открытие поиска | UI-состояние |
+| `app/src/components/ui/*` | Примитивы дизайн-системы (Button/Card/Input/TextArea/Badge) | варианты/стили |
+| `app/src/features/projects/ProjectSidebar.tsx` | Левая панель: проекты | UI/логика |
+| `app/src/features/series/SeriesList.tsx` | Средняя панель: серии | UI/логика |
+| `app/src/features/content/BlockEditor.tsx` | Правая панель: блоки + добавление | UI/логика |
+| `app/src/features/search/SearchPalette.tsx` | Командная палитра поиска (Ctrl/Cmd+K) | UI/логика |
+| `app/src/styles/tokens.css` | Дизайн-токены HSL (терминальная тема) | тема/цвета |
+
+## Код: корень репозитория
+
+| Путь | Назначение | Можно менять |
+| --- | --- | --- |
+| `.github/workflows/devnotes-ci.yml` | CI: тесты ядра (fmt/clippy/test) + фронтенда (typecheck/test/build) | шаги пайплайна |
+
+## Планируемое (по `10-ROADMAP.md`, ещё не реализовано)
+
+| Путь (план) | Назначение |
 | --- | --- |
-| `src/index.html`, `src/vite.config.ts`, `src/package.json`, `src/tailwind.config.ts` | Конфигурация сборки и Tailwind |
-| `src/src/app/` | Точка входа, роутинг, провайдеры (Query/Zustand) |
-| `src/src/domain/` | Зеркало доменных типов (TS), `camelCase` |
-| `src/src/repositories/` | Repository-pattern + генераторы query-key |
-| `src/src/features/` | Фичи: notes, search, sync, settings… |
-| `src/src/components/ui/` | Примитивы дизайн-системы (Button, Card, Input, Badge…) |
-| `src/src/stores/` | Zustand-сторы |
-| `src/src/styles/` | Дизайн-токены HSL, глобальные стили |
-| `src/tests/` | Vitest/RTL unit, Playwright e2e |
-
-### Корневые (план)
-
-| Путь | Назначение (план) |
-| --- | --- |
-| `.github/workflows/ci.yml` | CI: линт, типизация, `cargo test`, Vitest, сборка Tauri (→ `13-TESTING.md`) |
+| `core/src/infrastructure/sync/` или `core/src/yandex.rs` | Клиент Яндекс.Диска, oplog, разрешение конфликтов (v0.3) |
+| `core/migrations/002_*.sql` | Версии/вложения/wiki-links/backlinks (v1.0) |
+| `app/src/features/sync/`, `app/src/features/settings/` | UI синхронизации и настроек |
+| `app/e2e/` | Playwright e2e (по мере готовности UI) |

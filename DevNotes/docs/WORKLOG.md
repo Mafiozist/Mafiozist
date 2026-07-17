@@ -49,6 +49,25 @@
 
 ---
 
+## Прогон #2 — 2026-07-17 · Реализация MVP
+
+**Роль opus (реализация в main loop, без суб-агентов — лимит сессии).** Проверка среды: Rust 1.94 ✅, Node 22 ✅, `webkit2gtk` ❌ (GUI Tauri локально не собрать). Решение: ядро вынесено в отдельный крейт `core/` без Tauri-зависимости — компилируется и тестируется локально.
+
+**Сделано и проверено:**
+
+| Компонент | Артефакт | Проверка |
+| --- | --- | --- |
+| Ядро `core/` (`devnotes-core`) | миграция 001 (схема+FTS5+триггеры), домен, порты, `SqliteStore`, `search`, `sync` (LWW), `NotesService` | `cargo test` — **18/18 зелёные**; `cargo clippy` — без предупреждений; `cargo fmt` применён |
+| Оболочка `src-tauri/` (Tauri 2) | IPC-команды поверх ядра, инициализация БД, `tauri.conf.json`, capabilities | код валиден; локально не собирается (нет WebKit) — соберётся в CI/на машине с webkit2gtk |
+| Фронтенд `app/` (React 19+Vite) | дизайн-токены, UI-примитивы (CVA), трёхпанельная раскладка, командная палитра, IPC-обёртка с браузерным моком | `tsc --noEmit` + `vite build` — **зелёные**; `vitest` — **5/5 зелёные** |
+| CI | `.github/workflows/devnotes-ci.yml` | тесты ядра (fmt/clippy/test) + фронтенда (typecheck/test/build), фильтр путей `DevNotes/**` |
+
+**Уточнение архитектуры:** ядро — отдельный крейт `core/` (не внутри `src-tauri/`); фронтенд — `app/` (не `src/`). Причина: тестируемость ядра без GUI. Отражено в `CLAUDE.md` §2 и `11-FILE-INDEX.md`.
+
+**Не реализовано (следующие шаги, по `10-ROADMAP.md`):** синхронизация с Яндекс.Диском (v0.3), версии/вложения/wiki-links/backlinks (v1.0), граф/spaced-repetition/шифрование/mobile (v2.0); иконки `src-tauri/icons/*`; e2e Playwright; доработка 4 документов по замечаниям критика (см. Прогон #1).
+
+---
+
 ## Как продолжить в новой сессии
 
 1. Подтянуть ветку: `git fetch origin claude/dev-notes-app-design-xa33vz && git checkout claude/dev-notes-app-design-xa33vz`.

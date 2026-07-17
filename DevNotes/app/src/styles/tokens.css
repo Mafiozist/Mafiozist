@@ -1,0 +1,77 @@
+/* Дизайн-токены DEVNOTES — терминально-хакерская эстетика (перенято из Portfolio).
+   Тёмная тема по умолчанию, неоново-зелёный акцент. См. docs/06-UI-UX.md. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Светлая тема (запасная). */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+    --primary: 142 71% 45%; /* #22c55e — зелёный акцент */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 142 71% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 142 71% 45%;
+    --radius: 0.5rem;
+  }
+
+  /* Тёмная тема — основная (терминал). */
+  .dark {
+    --background: 240 10% 4%; /* почти чёрный */
+    --foreground: 140 15% 88%;
+    --card: 240 8% 7%;
+    --card-foreground: 140 15% 88%;
+    --primary: 142 71% 45%;
+    --primary-foreground: 240 10% 4%;
+    --secondary: 240 6% 12%;
+    --secondary-foreground: 140 15% 88%;
+    --muted: 240 6% 12%;
+    --muted-foreground: 140 8% 55%;
+    --accent: 142 71% 45%;
+    --accent-foreground: 240 10% 4%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 16%;
+    --input: 240 6% 16%;
+    --ring: 142 71% 45%;
+    --radius: 0.5rem;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* Неоновое свечение акцентного текста (лого, курсор). */
+  .neon-text {
+    text-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+  }
+
+  /* Тонкая «matrix»-сетка фона. */
+  .matrix-bg {
+    background-image:
+      linear-gradient(90deg, hsl(var(--primary) / 0.06) 1px, transparent 1px),
+      linear-gradient(hsl(var(--primary) / 0.06) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+}

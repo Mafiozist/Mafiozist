@@ -32,7 +32,9 @@ impl NotesService {
     ) -> Result<Project> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(CoreError::Invalid("имя проекта не может быть пустым".into()));
+            return Err(CoreError::Invalid(
+                "имя проекта не может быть пустым".into(),
+            ));
         }
         self.store.create_project(name, short_name, description)
     }
@@ -55,7 +57,9 @@ impl NotesService {
     ) -> Result<NoteSeries> {
         let title = title.trim();
         if title.is_empty() {
-            return Err(CoreError::Invalid("заголовок серии не может быть пустым".into()));
+            return Err(CoreError::Invalid(
+                "заголовок серии не может быть пустым".into(),
+            ));
         }
         self.store.create_series(project_id, title, description)
     }
@@ -82,7 +86,8 @@ impl NotesService {
                 "недопустимый тип блока: {content_type_value}"
             )));
         }
-        self.store.add_content(series_id, title, text, content_type_value)
+        self.store
+            .add_content(series_id, title, text, content_type_value)
     }
 
     pub fn list_content(&self, series_id: &str) -> Result<Vec<NoteContent>> {
@@ -102,7 +107,8 @@ impl NotesService {
                 "недопустимый тип блока: {content_type_value}"
             )));
         }
-        self.store.update_content(id, title, text, content_type_value)
+        self.store
+            .update_content(id, title, text, content_type_value)
     }
 
     pub fn delete_content(&self, id: &str) -> Result<()> {

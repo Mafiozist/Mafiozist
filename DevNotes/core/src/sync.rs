@@ -85,6 +85,9 @@ mod tests {
     #[test]
     fn invalid_timestamp_loses_to_valid() {
         // Битая локальная метка → удалённая валидная считается новее.
-        assert_eq!(resolve("not-a-date", "2026-07-17T10:00:00Z", false), Resolution::TakeRemote);
+        assert_eq!(
+            resolve("not-a-date", "2026-07-17T10:00:00Z", false),
+            Resolution::TakeRemote
+        );
     }
 }

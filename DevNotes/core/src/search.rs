@@ -46,7 +46,10 @@ mod tests {
 
     #[test]
     fn splits_and_wraps_tokens_with_prefix() {
-        assert_eq!(to_fts_query("tokio async"), Some("\"tokio\"* \"async\"*".into()));
+        assert_eq!(
+            to_fts_query("tokio async"),
+            Some("\"tokio\"* \"async\"*".into())
+        );
     }
 
     #[test]

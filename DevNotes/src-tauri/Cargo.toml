@@ -1,0 +1,28 @@
+# src-tauri — десктоп-оболочка DEVNOTES (Tauri 2).
+#
+# ПОЧЕМУ отдельно от core: здесь только тонкий слой IPC (Tauri-команды),
+# который маршалит вызовы во внешний крейт devnotes-core. Бизнес-логики тут нет.
+# Требует системного WebKitGTK для сборки/запуска на Linux (в среде без GUI
+# компилируется только ядро — см. docs/13-TESTING.md).
+[package]
+name = "devnotes"
+version = "0.1.0"
+edition = "2021"
+description = "DEVNOTES — local-first заметки по технологиям разработки"
+authors = ["Mafiozist"]
+license = "MIT"
+
+[lib]
+# Имя библиотеки, которую подключает main.rs (стандартная раскладка Tauri 2).
+name = "devnotes_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Ядро приложения: домен, хранилище, поиск, синхронизация.
+devnotes-core = { path = "../core" }

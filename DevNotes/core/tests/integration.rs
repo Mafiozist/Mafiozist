@@ -18,7 +18,9 @@ struct FixedClock {
 }
 impl FixedClock {
     fn new() -> Self {
-        Self { counter: AtomicU32::new(0) }
+        Self {
+            counter: AtomicU32::new(0),
+        }
     }
 }
 impl Clock for FixedClock {
@@ -35,7 +37,9 @@ struct SeqIds {
 }
 impl SeqIds {
     fn new() -> Self {
-        Self { counter: AtomicU32::new(0) }
+        Self {
+            counter: AtomicU32::new(0),
+        }
     }
 }
 impl IdGenerator for SeqIds {
@@ -57,7 +61,8 @@ fn service() -> NotesService {
 fn creates_and_lists_projects() {
     let svc = service();
     svc.create_project("Rust CLI", Some("rcli"), None).unwrap();
-    svc.create_project("Web App", None, Some("frontend")).unwrap();
+    svc.create_project("Web App", None, Some("frontend"))
+        .unwrap();
 
     let projects = svc.list_projects().unwrap();
     assert_eq!(projects.len(), 2);
@@ -76,8 +81,10 @@ fn empty_project_name_is_rejected() {
 fn content_blocks_keep_insertion_order() {
     let svc = service();
     let s = svc.create_series(None, "Async in Rust", None).unwrap();
-    svc.add_content(&s.id, Some("intro"), "первый блок", content_type::MARKDOWN).unwrap();
-    svc.add_content(&s.id, None, "второй блок", content_type::CODE).unwrap();
+    svc.add_content(&s.id, Some("intro"), "первый блок", content_type::MARKDOWN)
+        .unwrap();
+    svc.add_content(&s.id, None, "второй блок", content_type::CODE)
+        .unwrap();
 
     let blocks = svc.list_content(&s.id).unwrap();
     assert_eq!(blocks.len(), 2);
@@ -90,7 +97,9 @@ fn content_blocks_keep_insertion_order() {
 fn invalid_content_type_is_rejected() {
     let svc = service();
     let s = svc.create_series(None, "S", None).unwrap();
-    let err = svc.add_content(&s.id, None, "x", "spreadsheet").unwrap_err();
+    let err = svc
+        .add_content(&s.id, None, "x", "spreadsheet")
+        .unwrap_err();
     assert!(matches!(err, CoreError::Invalid(_)));
 }
 
@@ -99,20 +108,41 @@ fn fts5_search_finds_updates_and_deletes() {
     let svc = service();
     let s = svc.create_series(None, "Tokio", None).unwrap();
     let c = svc
-        .add_content(&s.id, Some("spawn"), "tokio::spawn запускает задачу", content_type::CODE)
+        .add_content(
+            &s.id,
+            Some("spawn"),
+            "tokio::spawn запускает задачу",
+            content_type::CODE,
+        )
         .unwrap();
 
     // Найдено по слову и по префиксу.
     let hits = svc.search("tokio", 10).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].content_id, c.id);
-    assert!(svc.search("spaw", 10).unwrap().len() == 1, "префиксный поиск должен находить");
+    assert!(
+        svc.search("spaw", 10).unwrap().len() == 1,
+        "префиксный поиск должен находить"
+    );
 
     // После обновления текст переиндексируется триггером.
-    svc.update_content(&c.id, Some("spawn"), "переписали на async-std", content_type::CODE)
-        .unwrap();
-    assert_eq!(svc.search("tokio", 10).unwrap().len(), 0, "старый термин исчез из индекса");
-    assert_eq!(svc.search("async", 10).unwrap().len(), 1, "новый термин появился");
+    svc.update_content(
+        &c.id,
+        Some("spawn"),
+        "переписали на async-std",
+        content_type::CODE,
+    )
+    .unwrap();
+    assert_eq!(
+        svc.search("tokio", 10).unwrap().len(),
+        0,
+        "старый термин исчез из индекса"
+    );
+    assert_eq!(
+        svc.search("async", 10).unwrap().len(),
+        1,
+        "новый термин появился"
+    );
 
     // После удаления блок исчезает из индекса.
     svc.delete_content(&c.id).unwrap();
@@ -124,11 +154,21 @@ fn search_ranks_title_matches_higher() {
     let svc = service();
     let s = svc.create_series(None, "Ranking", None).unwrap();
     // «postgres» в тексте.
-    svc.add_content(&s.id, Some("misc"), "немного про postgres в тексте", content_type::MARKDOWN)
-        .unwrap();
+    svc.add_content(
+        &s.id,
+        Some("misc"),
+        "немного про postgres в тексте",
+        content_type::MARKDOWN,
+    )
+    .unwrap();
     // «postgres» в заголовке (вес заголовка выше — bm25 5.0 vs 1.0).
     let title_hit = svc
-        .add_content(&s.id, Some("postgres"), "тело без ключевого слова", content_type::MARKDOWN)
+        .add_content(
+            &s.id,
+            Some("postgres"),
+            "тело без ключевого слова",
+            content_type::MARKDOWN,
+        )
         .unwrap();
 
     let hits = svc.search("postgres", 10).unwrap();
@@ -141,8 +181,12 @@ fn search_ranks_title_matches_higher() {
 fn reorder_changes_sort_order() {
     let svc = service();
     let s = svc.create_series(None, "Reorder", None).unwrap();
-    let a = svc.add_content(&s.id, None, "A", content_type::MARKDOWN).unwrap();
-    let b = svc.add_content(&s.id, None, "B", content_type::MARKDOWN).unwrap();
+    let a = svc
+        .add_content(&s.id, None, "A", content_type::MARKDOWN)
+        .unwrap();
+    let b = svc
+        .add_content(&s.id, None, "B", content_type::MARKDOWN)
+        .unwrap();
 
     svc.reorder_content(&[&b.id, &a.id]).unwrap();
 
@@ -156,13 +200,22 @@ fn deleting_project_cascades_to_series_and_content() {
     let svc = service();
     let p = svc.create_project("P", None, None).unwrap();
     let s = svc.create_series(Some(&p.id), "S", None).unwrap();
-    svc.add_content(&s.id, None, "уникальное_слово_каскад", content_type::MARKDOWN).unwrap();
+    svc.add_content(
+        &s.id,
+        None,
+        "уникальное_слово_каскад",
+        content_type::MARKDOWN,
+    )
+    .unwrap();
 
     assert_eq!(svc.search("уникальное_слово_каскад", 10).unwrap().len(), 1);
 
     svc.delete_project(&p.id).unwrap();
 
-    assert!(svc.list_series(Some(&p.id)).unwrap().is_empty(), "серии удалены каскадом");
+    assert!(
+        svc.list_series(Some(&p.id)).unwrap().is_empty(),
+        "серии удалены каскадом"
+    );
     assert_eq!(
         svc.search("уникальное_слово_каскад", 10).unwrap().len(),
         0,

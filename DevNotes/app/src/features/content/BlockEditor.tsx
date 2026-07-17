@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/Input";
 import { TextArea } from "@/components/ui/TextArea";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { SeriesTagsBar } from "@/features/tags/SeriesTagsBar";
 
 const CONTENT_TYPES: ContentType[] = ["markdown", "code", "image", "link"];
 
@@ -55,6 +56,9 @@ export function BlockEditor() {
 
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
+      {/* Панель тегов технологий текущей серии */}
+      <SeriesTagsBar seriesId={seriesId} />
+
       <div className="flex-1 space-y-3 overflow-y-auto p-6">
         {blocks.length === 0 && (
           <p className="text-sm text-muted-foreground">В этой серии ещё нет блоков.</p>

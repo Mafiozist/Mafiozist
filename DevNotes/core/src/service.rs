@@ -4,7 +4,9 @@
 //! допустимость типа блока) — до обращения к БД. IPC-слой (src-tauri) вызывает
 //! именно эти функции, а не хранилище напрямую. См. `docs/04-ARCHITECTURE.md`.
 
-use crate::domain::{content_type, NoteContent, NoteSeries, Project, SearchHit};
+use crate::domain::{
+    content_type, NoteContent, NoteSeries, Project, SearchHit, TechTag, TechTagType,
+};
 use crate::sqlite::SqliteStore;
 use crate::{CoreError, Result};
 
@@ -119,8 +121,59 @@ impl NotesService {
         self.store.reorder_content(ordered_ids)
     }
 
-    /// Полнотекстовый поиск по всей БД. `limit` ограничивает число результатов.
-    pub fn search(&self, raw: &str, limit: i64) -> Result<Vec<SearchHit>> {
-        self.store.search(raw, limit.clamp(1, 500))
+    // --- Теги технологий ---------------------------------------------------
+
+    /// Создаёт категорию тегов. Имя обязательно.
+    pub fn create_tag_type(&self, name: &str) -> Result<TechTagType> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CoreError::Invalid(
+                "имя категории не может быть пустым".into(),
+            ));
+        }
+        self.store.create_tag_type(name)
+    }
+
+    pub fn list_tag_types(&self) -> Result<Vec<TechTagType>> {
+        self.store.list_tag_types()
+    }
+
+    /// Создаёт тег технологии. Имя обязательно.
+    pub fn create_tag(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        type_id: Option<&str>,
+    ) -> Result<TechTag> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CoreError::Invalid("имя тега не может быть пустым".into()));
+        }
+        self.store.create_tag(name, description, type_id)
+    }
+
+    pub fn list_tags(&self) -> Result<Vec<TechTag>> {
+        self.store.list_tags()
+    }
+
+    pub fn delete_tag(&self, id: &str) -> Result<()> {
+        self.store.delete_tag(id)
+    }
+
+    pub fn list_tags_for_series(&self, series_id: &str) -> Result<Vec<TechTag>> {
+        self.store.list_tags_for_series(series_id)
+    }
+
+    /// Заменяет набор тегов серии переданным списком.
+    pub fn set_series_tags(&self, series_id: &str, tag_ids: &[&str]) -> Result<()> {
+        self.store.set_series_tags(series_id, tag_ids)
+    }
+
+    // --- Поиск -------------------------------------------------------------
+
+    /// Полнотекстовый поиск по всей БД с опциональным фильтром по тегам технологий.
+    /// `limit` ограничивает число результатов.
+    pub fn search(&self, raw: &str, tag_ids: &[&str], limit: i64) -> Result<Vec<SearchHit>> {
+        self.store.search(raw, tag_ids, limit.clamp(1, 500))
     }
 }

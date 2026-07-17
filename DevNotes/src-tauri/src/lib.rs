@@ -6,7 +6,7 @@
 
 use std::sync::Mutex;
 
-use devnotes_core::domain::{NoteContent, NoteSeries, Project, SearchHit};
+use devnotes_core::domain::{NoteContent, NoteSeries, Project, SearchHit, TechTag, TechTagType};
 use devnotes_core::ports::{SystemClock, UuidV7Generator};
 use devnotes_core::service::NotesService;
 use devnotes_core::sqlite::SqliteStore;
@@ -124,12 +124,74 @@ fn reorder_content(state: State<AppState>, ordered_ids: Vec<String>) -> CmdResul
     svc.reorder_content(&refs).map_err(to_err)
 }
 
+// --- Команды: теги технологий ----------------------------------------------
+
+#[tauri::command]
+fn list_tags(state: State<AppState>) -> CmdResult<Vec<TechTag>> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.list_tags().map_err(to_err)
+}
+
+#[tauri::command]
+fn create_tag(
+    state: State<AppState>,
+    name: String,
+    description: Option<String>,
+    type_id: Option<String>,
+) -> CmdResult<TechTag> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.create_tag(&name, description.as_deref(), type_id.as_deref())
+        .map_err(to_err)
+}
+
+#[tauri::command]
+fn delete_tag(state: State<AppState>, id: String) -> CmdResult<()> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.delete_tag(&id).map_err(to_err)
+}
+
+#[tauri::command]
+fn list_tag_types(state: State<AppState>) -> CmdResult<Vec<TechTagType>> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.list_tag_types().map_err(to_err)
+}
+
+#[tauri::command]
+fn create_tag_type(state: State<AppState>, name: String) -> CmdResult<TechTagType> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.create_tag_type(&name).map_err(to_err)
+}
+
+#[tauri::command]
+fn list_tags_for_series(state: State<AppState>, series_id: String) -> CmdResult<Vec<TechTag>> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.list_tags_for_series(&series_id).map_err(to_err)
+}
+
+#[tauri::command]
+fn set_series_tags(
+    state: State<AppState>,
+    series_id: String,
+    tag_ids: Vec<String>,
+) -> CmdResult<()> {
+    let svc = state.0.lock().map_err(to_err)?;
+    let refs: Vec<&str> = tag_ids.iter().map(String::as_str).collect();
+    svc.set_series_tags(&series_id, &refs).map_err(to_err)
+}
+
 // --- Команды: поиск --------------------------------------------------------
 
 #[tauri::command]
-fn search(state: State<AppState>, query: String, limit: Option<i64>) -> CmdResult<Vec<SearchHit>> {
+fn search(
+    state: State<AppState>,
+    query: String,
+    tag_ids: Option<Vec<String>>,
+    limit: Option<i64>,
+) -> CmdResult<Vec<SearchHit>> {
     let svc = state.0.lock().map_err(to_err)?;
-    svc.search(&query, limit.unwrap_or(50)).map_err(to_err)
+    let tag_ids = tag_ids.unwrap_or_default();
+    let refs: Vec<&str> = tag_ids.iter().map(String::as_str).collect();
+    svc.search(&query, &refs, limit.unwrap_or(50)).map_err(to_err)
 }
 
 /// Инициализирует хранилище в каталоге данных приложения и запускает окно.
@@ -169,6 +231,13 @@ pub fn run() {
             update_content,
             delete_content,
             reorder_content,
+            list_tags,
+            create_tag,
+            delete_tag,
+            list_tag_types,
+            create_tag_type,
+            list_tags_for_series,
+            set_series_tags,
             search,
         ])
         .run(tauri::generate_context!())

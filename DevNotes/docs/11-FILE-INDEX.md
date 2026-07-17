@@ -94,7 +94,9 @@
 | `app/src/features/projects/ProjectSidebar.tsx` | Левая панель: проекты | UI/логика |
 | `app/src/features/series/SeriesList.tsx` | Средняя панель: серии | UI/логика |
 | `app/src/features/content/BlockEditor.tsx` | Правая панель: блоки + добавление | UI/логика |
-| `app/src/features/search/SearchPalette.tsx` | Командная палитра поиска (Ctrl/Cmd+K) | UI/логика |
+| `app/src/features/search/SearchPalette.tsx` | Командная палитра поиска (Ctrl/Cmd+K) + фильтр по тегам | UI/логика |
+| `app/src/features/tags/TagSelector.tsx` | Селектор тегов: дропдаун с поиском/чипами/созданием | UI/логика |
+| `app/src/features/tags/SeriesTagsBar.tsx` | Панель тегов серии (показ + назначение) | UI/логика |
 | `app/src/styles/tokens.css` | Дизайн-токены HSL (терминальная тема) | тема/цвета |
 
 ## Код: корень репозитория

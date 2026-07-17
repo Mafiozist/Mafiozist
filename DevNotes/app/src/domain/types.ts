@@ -38,6 +38,22 @@ export interface NoteContent {
   updated_at: string;
 }
 
+/** Категория тега технологий (язык / фреймворк / инструмент …). */
+export interface TechTagType {
+  id: string;
+  type: string;
+}
+
+/** Тег технологии, которым помечаются серии заметок. */
+export interface TechTag {
+  id: string;
+  name: string;
+  description: string | null;
+  type_id: string | null;
+  /** Название категории (join из tech_tag_type). */
+  typeName: string | null;
+}
+
 /** Результат полнотекстового поиска. */
 export interface SearchHit {
   content_id: string;

@@ -117,11 +117,11 @@ fn fts5_search_finds_updates_and_deletes() {
         .unwrap();
 
     // Найдено по слову и по префиксу.
-    let hits = svc.search("tokio", 10).unwrap();
+    let hits = svc.search("tokio", &[], 10).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].content_id, c.id);
     assert!(
-        svc.search("spaw", 10).unwrap().len() == 1,
+        svc.search("spaw", &[], 10).unwrap().len() == 1,
         "префиксный поиск должен находить"
     );
 
@@ -134,19 +134,19 @@ fn fts5_search_finds_updates_and_deletes() {
     )
     .unwrap();
     assert_eq!(
-        svc.search("tokio", 10).unwrap().len(),
+        svc.search("tokio", &[], 10).unwrap().len(),
         0,
         "старый термин исчез из индекса"
     );
     assert_eq!(
-        svc.search("async", 10).unwrap().len(),
+        svc.search("async", &[], 10).unwrap().len(),
         1,
         "новый термин появился"
     );
 
     // После удаления блок исчезает из индекса.
     svc.delete_content(&c.id).unwrap();
-    assert_eq!(svc.search("async", 10).unwrap().len(), 0);
+    assert_eq!(svc.search("async", &[], 10).unwrap().len(), 0);
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn search_ranks_title_matches_higher() {
         )
         .unwrap();
 
-    let hits = svc.search("postgres", 10).unwrap();
+    let hits = svc.search("postgres", &[], 10).unwrap();
     assert_eq!(hits.len(), 2);
     // Меньший rank = релевантнее; совпадение в заголовке должно быть первым.
     assert_eq!(hits[0].content_id, title_hit.id);
@@ -208,7 +208,12 @@ fn deleting_project_cascades_to_series_and_content() {
     )
     .unwrap();
 
-    assert_eq!(svc.search("уникальное_слово_каскад", 10).unwrap().len(), 1);
+    assert_eq!(
+        svc.search("уникальное_слово_каскад", &[], 10)
+            .unwrap()
+            .len(),
+        1
+    );
 
     svc.delete_project(&p.id).unwrap();
 
@@ -217,7 +222,9 @@ fn deleting_project_cascades_to_series_and_content() {
         "серии удалены каскадом"
     );
     assert_eq!(
-        svc.search("уникальное_слово_каскад", 10).unwrap().len(),
+        svc.search("уникальное_слово_каскад", &[], 10)
+            .unwrap()
+            .len(),
         0,
         "блоки удалены каскадом и вычищены из FTS-индекса"
     );
@@ -228,4 +235,96 @@ fn deleting_missing_content_returns_not_found() {
     let svc = service();
     let err = svc.delete_content("id-does-not-exist").unwrap_err();
     assert!(matches!(err, CoreError::NotFound));
+}
+
+#[test]
+fn tags_can_be_created_and_attached_to_series() {
+    let svc = service();
+    let ty = svc.create_tag_type("язык").unwrap();
+    let rust = svc.create_tag("Rust", None, Some(&ty.id)).unwrap();
+    let sql = svc.create_tag("SQLite", None, None).unwrap();
+
+    let s = svc.create_series(None, "Заметка", None).unwrap();
+    svc.set_series_tags(&s.id, &[&rust.id, &sql.id]).unwrap();
+
+    let tags = svc.list_tags_for_series(&s.id).unwrap();
+    assert_eq!(tags.len(), 2);
+    // Категория подтянута в поле type_name.
+    let rust_tag = tags.iter().find(|t| t.name == "Rust").unwrap();
+    assert_eq!(rust_tag.type_name.as_deref(), Some("язык"));
+}
+
+#[test]
+fn set_series_tags_replaces_previous_set() {
+    let svc = service();
+    let a = svc.create_tag("A", None, None).unwrap();
+    let b = svc.create_tag("B", None, None).unwrap();
+    let s = svc.create_series(None, "S", None).unwrap();
+
+    svc.set_series_tags(&s.id, &[&a.id, &b.id]).unwrap();
+    assert_eq!(svc.list_tags_for_series(&s.id).unwrap().len(), 2);
+
+    // Повторный вызов ПОЛНОСТЬЮ заменяет набор.
+    svc.set_series_tags(&s.id, &[&a.id]).unwrap();
+    let tags = svc.list_tags_for_series(&s.id).unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "A");
+}
+
+#[test]
+fn search_filters_by_tags_with_and_semantics() {
+    let svc = service();
+    let rust = svc.create_tag("Rust", None, None).unwrap();
+    let web = svc.create_tag("Web", None, None).unwrap();
+
+    // Серия 1: тег Rust, содержит слово «индекс».
+    let s1 = svc.create_series(None, "Ядро", None).unwrap();
+    svc.set_series_tags(&s1.id, &[&rust.id]).unwrap();
+    svc.add_content(
+        &s1.id,
+        None,
+        "быстрый индекс поиска",
+        content_type::MARKDOWN,
+    )
+    .unwrap();
+
+    // Серия 2: тег Web, тоже содержит «индекс».
+    let s2 = svc.create_series(None, "Фронт", None).unwrap();
+    svc.set_series_tags(&s2.id, &[&web.id]).unwrap();
+    svc.add_content(&s2.id, None, "индекс на странице", content_type::MARKDOWN)
+        .unwrap();
+
+    // Без тегов — оба блока.
+    assert_eq!(svc.search("индекс", &[], 10).unwrap().len(), 2);
+    // Фильтр по тегу Rust — только серия 1.
+    let hits = svc.search("индекс", &[&rust.id], 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].series_id, s1.id);
+    // Оба тега сразу (AND) — ни одна серия не имеет обоих → пусто.
+    assert_eq!(
+        svc.search("индекс", &[&rust.id, &web.id], 10)
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+#[test]
+fn search_by_tags_without_text_returns_series_content() {
+    let svc = service();
+    let rust = svc.create_tag("Rust", None, None).unwrap();
+    let s = svc.create_series(None, "Ядро", None).unwrap();
+    svc.set_series_tags(&s.id, &[&rust.id]).unwrap();
+    svc.add_content(
+        &s.id,
+        Some("h"),
+        "любой текст без ключевого слова",
+        content_type::MARKDOWN,
+    )
+    .unwrap();
+
+    // Пустой текст + выбранный тег → блоки серии возвращаются.
+    let hits = svc.search("", &[&rust.id], 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].series_id, s.id);
 }

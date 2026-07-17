@@ -5,7 +5,15 @@
 // Rust-ядро, — приложение работает автономно для разработки UI.
 // В десктопе (Tauri) вызовы идут в настоящие команды src-tauri/src/lib.rs.
 
-import type { NoteContent, NoteSeries, Project, SearchHit, ContentType } from "@/domain/types";
+import type {
+  NoteContent,
+  NoteSeries,
+  Project,
+  SearchHit,
+  ContentType,
+  TechTag,
+  TechTagType,
+} from "@/domain/types";
 
 /** Признак запуска внутри Tauri (иначе — браузерный мок). */
 function inTauri(): boolean {
@@ -35,6 +43,9 @@ class MockBackend {
   private projects: Project[] = [];
   private series: NoteSeries[] = [];
   private contents: NoteContent[] = [];
+  private tagTypes: TechTagType[] = [];
+  private tags: TechTag[] = [];
+  private seriesTags: Array<{ seriesId: string; tagId: string }> = [];
 
   constructor() {
     // Небольшой демонстрационный набор, чтобы UI не был пустым в браузере.
@@ -42,6 +53,13 @@ class MockBackend {
     const s = this.createSeries(p.id, "Rust + SQLite", "Заметки по ядру DevNotes");
     this.addContent(s.id, "FTS5", "SQLite FTS5 даёт полнотекстовый поиск с bm25.", "markdown");
     this.addContent(s.id, "Пример", "tokio::spawn запускает асинхронную задачу.", "code");
+    // Демонстрационные теги технологий.
+    const lang = this.createTagType("язык");
+    const db = this.createTagType("хранилище");
+    const rust = this.createTag("Rust", undefined, lang.id);
+    const sqlite = this.createTag("SQLite", undefined, db.id);
+    this.createTag("React", undefined, undefined);
+    this.setSeriesTags(s.id, [rust.id, sqlite.id]);
   }
 
   dispatch<T>(command: string, a: Record<string, unknown>): Promise<T> {
@@ -69,8 +87,28 @@ class MockBackend {
         return r(this.deleteContent(a.id as string));
       case "reorder_content":
         return r(this.reorder(a.orderedIds as string[]));
+      case "list_tags":
+        return r([...this.tags]);
+      case "create_tag":
+        return r(this.createTag(a.name as string, a.description as string | undefined, a.typeId as string | undefined));
+      case "delete_tag":
+        return r(this.deleteTag(a.id as string));
+      case "list_tag_types":
+        return r([...this.tagTypes]);
+      case "create_tag_type":
+        return r(this.createTagType(a.name as string));
+      case "list_tags_for_series":
+        return r(this.listTagsForSeries(a.seriesId as string));
+      case "set_series_tags":
+        return r(this.setSeriesTags(a.seriesId as string, a.tagIds as string[]));
       case "search":
-        return r(this.search(a.query as string, (a.limit as number | undefined) ?? 50));
+        return r(
+          this.search(
+            a.query as string,
+            (a.tagIds as string[] | undefined) ?? [],
+            (a.limit as number | undefined) ?? 50,
+          ),
+        );
       default:
         return Promise.reject(new Error(`mock: неизвестная команда ${command}`));
     }
@@ -164,11 +202,67 @@ class MockBackend {
     });
   }
 
-  private search(query: string, limit: number): SearchHit[] {
+  // --- Теги ---------------------------------------------------------------
+
+  private createTagType(name: string): TechTagType {
+    const t: TechTagType = { id: uid(), type: name };
+    this.tagTypes.push(t);
+    return t;
+  }
+
+  private createTag(name: string, description?: string, typeId?: string): TechTag {
+    const tag: TechTag = {
+      id: uid(),
+      name,
+      description: description ?? null,
+      type_id: typeId ?? null,
+      typeName: this.tagTypes.find((t) => t.id === typeId)?.type ?? null,
+    };
+    this.tags.push(tag);
+    return tag;
+  }
+
+  private deleteTag(id: string): void {
+    this.tags = this.tags.filter((t) => t.id !== id);
+    this.seriesTags = this.seriesTags.filter((st) => st.tagId !== id);
+  }
+
+  private listTagsForSeries(seriesId: string): TechTag[] {
+    const ids = this.seriesTags.filter((st) => st.seriesId === seriesId).map((st) => st.tagId);
+    return this.tags.filter((t) => ids.includes(t.id));
+  }
+
+  private setSeriesTags(seriesId: string, tagIds: string[]): void {
+    this.seriesTags = this.seriesTags.filter((st) => st.seriesId !== seriesId);
+    for (const tagId of tagIds) this.seriesTags.push({ seriesId, tagId });
+  }
+
+  /** Серии, у которых есть ВСЕ выбранные теги (AND-семантика). */
+  private seriesWithAllTags(tagIds: string[]): Set<string> {
+    const result = new Set<string>();
+    for (const s of this.series) {
+      const owned = new Set(
+        this.seriesTags.filter((st) => st.seriesId === s.id).map((st) => st.tagId),
+      );
+      if (tagIds.every((id) => owned.has(id))) result.add(s.id);
+    }
+    return result;
+  }
+
+  // --- Поиск --------------------------------------------------------------
+
+  private search(query: string, tagIds: string[], limit: number): SearchHit[] {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
+    if (!q && tagIds.length === 0) return [];
+
+    const allowed = tagIds.length > 0 ? this.seriesWithAllTags(tagIds) : null;
+
     return this.contents
-      .filter((c) => c.text.toLowerCase().includes(q) || (c.title ?? "").toLowerCase().includes(q))
+      .filter((c) => {
+        if (allowed && !allowed.has(c.series_id)) return false;
+        if (!q) return true; // только теги → все блоки подходящих серий
+        return c.text.toLowerCase().includes(q) || (c.title ?? "").toLowerCase().includes(q);
+      })
       .slice(0, limit)
       .map((c) => ({
         content_id: c.id,

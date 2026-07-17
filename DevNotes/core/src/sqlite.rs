@@ -6,11 +6,17 @@
 //!
 //! ПОЧЕМУ время и id инъектируются: детерминизм тестов (см. `ports`).
 
-use rusqlite::{params, Connection};
+use rusqlite::types::Value;
+use rusqlite::{params, params_from_iter, Connection};
 
-use crate::domain::{NoteContent, NoteSeries, Project, SearchHit};
+use crate::domain::{NoteContent, NoteSeries, Project, SearchHit, TechTag, TechTagType};
 use crate::ports::{Clock, IdGenerator};
 use crate::{CoreError, Result};
+
+/// Строит строку placeholder'ов `?,?,…` для `IN (...)` c `n` элементами.
+fn placeholders(n: usize) -> String {
+    vec!["?"; n].join(",")
+}
 
 /// SQL первой миграции (встраивается в бинарник).
 const MIGRATION_001: &str = include_str!("../migrations/001_init.sql");
@@ -287,35 +293,225 @@ impl SqliteStore {
         Ok(())
     }
 
-    // --- Поиск -------------------------------------------------------------
+    // --- Теги технологий ---------------------------------------------------
 
-    /// Полнотекстовый поиск по блокам (FTS5 + bm25). `raw` — «сырой» пользовательский
-    /// ввод; преобразуется в безопасный запрос через [`crate::search::to_fts_query`].
-    /// Пустой/бессмысленный ввод даёт пустой результат.
-    pub fn search(&self, raw: &str, limit: i64) -> Result<Vec<SearchHit>> {
-        let query = match crate::search::to_fts_query(raw) {
-            Some(q) => q,
-            None => return Ok(Vec::new()),
+    /// Создаёт категорию тегов (язык / фреймворк / инструмент …).
+    pub fn create_tag_type(&self, name: &str) -> Result<TechTagType> {
+        let tag_type = TechTagType {
+            id: self.ids.new_id(),
+            type_name: name.to_string(),
         };
-        let mut stmt = self.conn.prepare(
-            "SELECT c.id, c.series_id, c.title,
-                    snippet(note_fts, 1, '[', ']', '…', 12) AS snip,
-                    bm25(note_fts, 5.0, 1.0) AS rank
-             FROM note_fts
-             JOIN note_content c ON c.rowid = note_fts.rowid
-             WHERE note_fts MATCH ?1
-             ORDER BY rank
-             LIMIT ?2",
+        self.conn.execute(
+            "INSERT INTO tech_tag_type (id, type) VALUES (?1, ?2)",
+            params![tag_type.id, tag_type.type_name],
         )?;
-        let rows = stmt.query_map(params![query, limit], |row| {
-            Ok(SearchHit {
-                content_id: row.get(0)?,
-                series_id: row.get(1)?,
-                title: row.get(2)?,
-                snippet: row.get(3)?,
-                rank: row.get(4)?,
+        Ok(tag_type)
+    }
+
+    /// Возвращает все категории тегов.
+    pub fn list_tag_types(&self) -> Result<Vec<TechTagType>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, type FROM tech_tag_type ORDER BY type")?;
+        let rows = stmt.query_map([], |row| {
+            Ok(TechTagType {
+                id: row.get(0)?,
+                type_name: row.get(1)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
+
+    /// Создаёт тег технологии, опционально в категории.
+    pub fn create_tag(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        type_id: Option<&str>,
+    ) -> Result<TechTag> {
+        let id = self.ids.new_id();
+        self.conn.execute(
+            "INSERT INTO tech_tag (id, name, description, type_id) VALUES (?1, ?2, ?3, ?4)",
+            params![id, name, description, type_id],
+        )?;
+        // Возвращаем с подтянутым именем категории.
+        self.get_tag(&id)
+    }
+
+    /// Возвращает один тег по id (с именем категории).
+    fn get_tag(&self, id: &str) -> Result<TechTag> {
+        self.conn
+            .query_row(
+                "SELECT t.id, t.name, t.description, t.type_id, tt.type
+                 FROM tech_tag t LEFT JOIN tech_tag_type tt ON tt.id = t.type_id
+                 WHERE t.id = ?1",
+                params![id],
+                map_tag,
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound,
+                other => CoreError::Db(other),
+            })
+    }
+
+    /// Возвращает все теги (с именами категорий), по алфавиту.
+    pub fn list_tags(&self) -> Result<Vec<TechTag>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT t.id, t.name, t.description, t.type_id, tt.type
+             FROM tech_tag t LEFT JOIN tech_tag_type tt ON tt.id = t.type_id
+             ORDER BY t.name",
+        )?;
+        let rows = stmt.query_map([], map_tag)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Удаляет тег (каскадно снимаются его привязки к сериям).
+    pub fn delete_tag(&self, id: &str) -> Result<()> {
+        let affected = self
+            .conn
+            .execute("DELETE FROM tech_tag WHERE id = ?1", params![id])?;
+        if affected == 0 {
+            return Err(CoreError::NotFound);
+        }
+        Ok(())
+    }
+
+    /// Возвращает теги, привязанные к серии.
+    pub fn list_tags_for_series(&self, series_id: &str) -> Result<Vec<TechTag>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT t.id, t.name, t.description, t.type_id, tt.type
+             FROM series_tag st
+             JOIN tech_tag t ON t.id = st.tag_id
+             LEFT JOIN tech_tag_type tt ON tt.id = t.type_id
+             WHERE st.series_id = ?1
+             ORDER BY t.name",
+        )?;
+        let rows = stmt.query_map(params![series_id], map_tag)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Полностью заменяет набор тегов серии переданным списком.
+    /// ПОЧЕМУ replace, а не add/remove: UI-переключатель отдаёт итоговый набор —
+    /// так проще держать состояние согласованным.
+    pub fn set_series_tags(&self, series_id: &str, tag_ids: &[&str]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM series_tag WHERE series_id = ?1",
+            params![series_id],
+        )?;
+        for tag_id in tag_ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO series_tag (series_id, tag_id) VALUES (?1, ?2)",
+                params![series_id, tag_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    // --- Поиск -------------------------------------------------------------
+
+    /// Полнотекстовый поиск по блокам (FTS5 + bm25) с опциональным фильтром по тегам.
+    ///
+    /// - `raw` — «сырой» пользовательский ввод (см. [`crate::search::to_fts_query`]);
+    /// - `tag_ids` — если непусто, результат ограничивается блоками серий, у которых
+    ///   есть ВСЕ выбранные теги (AND-семантика: больше тегов → уже выборка);
+    /// - при пустом тексте, но заданных тегах, возвращаются блоки таких серий без FTS;
+    /// - пустой текст и пустые теги → пустой результат.
+    pub fn search(&self, raw: &str, tag_ids: &[&str], limit: i64) -> Result<Vec<SearchHit>> {
+        let query = crate::search::to_fts_query(raw);
+        match (query, tag_ids.is_empty()) {
+            // Нечего искать.
+            (None, true) => Ok(Vec::new()),
+
+            // Только текст — как раньше.
+            (Some(q), true) => {
+                let mut stmt = self.conn.prepare(
+                    "SELECT c.id, c.series_id, c.title,
+                            snippet(note_fts, 1, '[', ']', '…', 12) AS snip,
+                            bm25(note_fts, 5.0, 1.0) AS rank
+                     FROM note_fts
+                     JOIN note_content c ON c.rowid = note_fts.rowid
+                     WHERE note_fts MATCH ?1
+                     ORDER BY rank
+                     LIMIT ?2",
+                )?;
+                let rows = stmt.query_map(params![q, limit], map_hit)?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            }
+
+            // Текст + фильтр по тегам.
+            (Some(q), false) => {
+                let sql = format!(
+                    "SELECT c.id, c.series_id, c.title,
+                            snippet(note_fts, 1, '[', ']', '…', 12) AS snip,
+                            bm25(note_fts, 5.0, 1.0) AS rank
+                     FROM note_fts
+                     JOIN note_content c ON c.rowid = note_fts.rowid
+                     WHERE note_fts MATCH ?
+                       AND c.series_id IN (
+                         SELECT series_id FROM series_tag
+                         WHERE tag_id IN ({ph})
+                         GROUP BY series_id HAVING COUNT(DISTINCT tag_id) = ?
+                       )
+                     ORDER BY rank
+                     LIMIT ?",
+                    ph = placeholders(tag_ids.len())
+                );
+                let mut values: Vec<Value> = Vec::new();
+                values.push(Value::Text(q));
+                values.extend(tag_ids.iter().map(|t| Value::Text((*t).to_string())));
+                values.push(Value::Integer(tag_ids.len() as i64));
+                values.push(Value::Integer(limit));
+                let mut stmt = self.conn.prepare(&sql)?;
+                let rows = stmt.query_map(params_from_iter(values), map_hit)?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            }
+
+            // Только теги (без текста): блоки серий, у которых есть все выбранные теги.
+            (None, false) => {
+                let sql = format!(
+                    "SELECT c.id, c.series_id, c.title, substr(c.text, 1, 120) AS snip, 0.0 AS rank
+                     FROM note_content c
+                     WHERE c.series_id IN (
+                       SELECT series_id FROM series_tag
+                       WHERE tag_id IN ({ph})
+                       GROUP BY series_id HAVING COUNT(DISTINCT tag_id) = ?
+                     )
+                     ORDER BY c.updated_at DESC
+                     LIMIT ?",
+                    ph = placeholders(tag_ids.len())
+                );
+                let mut values: Vec<Value> = Vec::new();
+                values.extend(tag_ids.iter().map(|t| Value::Text((*t).to_string())));
+                values.push(Value::Integer(tag_ids.len() as i64));
+                values.push(Value::Integer(limit));
+                let mut stmt = self.conn.prepare(&sql)?;
+                let rows = stmt.query_map(params_from_iter(values), map_hit)?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+            }
+        }
+    }
+}
+
+/// Маппер строки результата в [`SearchHit`].
+fn map_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit> {
+    Ok(SearchHit {
+        content_id: row.get(0)?,
+        series_id: row.get(1)?,
+        title: row.get(2)?,
+        snippet: row.get(3)?,
+        rank: row.get(4)?,
+    })
+}
+
+/// Маппер строки результата в [`TechTag`] (порядок колонок: id, name, description, type_id, type).
+fn map_tag(row: &rusqlite::Row) -> rusqlite::Result<TechTag> {
+    Ok(TechTag {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        description: row.get(2)?,
+        type_id: row.get(3)?,
+        type_name: row.get(4)?,
+    })
 }

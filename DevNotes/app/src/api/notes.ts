@@ -1,7 +1,15 @@
 // Типизированные обёртки над командами бэкенда (repository-слой).
 // Имена аргументов соответствуют camelCase-параметрам Tauri-команд.
 import { invoke } from "@/lib/ipc";
-import type { ContentType, NoteContent, NoteSeries, Project, SearchHit } from "@/domain/types";
+import type {
+  ContentType,
+  NoteContent,
+  NoteSeries,
+  Project,
+  SearchHit,
+  TechTag,
+  TechTagType,
+} from "@/domain/types";
 
 export const notesApi = {
   // Проекты
@@ -26,6 +34,19 @@ export const notesApi = {
   deleteContent: (id: string) => invoke<void>("delete_content", { id }),
   reorderContent: (orderedIds: string[]) => invoke<void>("reorder_content", { orderedIds }),
 
-  // Поиск
-  search: (query: string, limit = 50) => invoke<SearchHit[]>("search", { query, limit }),
+  // Теги технологий
+  listTags: () => invoke<TechTag[]>("list_tags"),
+  createTag: (name: string, description?: string, typeId?: string) =>
+    invoke<TechTag>("create_tag", { name, description, typeId }),
+  deleteTag: (id: string) => invoke<void>("delete_tag", { id }),
+  listTagTypes: () => invoke<TechTagType[]>("list_tag_types"),
+  createTagType: (name: string) => invoke<TechTagType>("create_tag_type", { name }),
+  listTagsForSeries: (seriesId: string) =>
+    invoke<TechTag[]>("list_tags_for_series", { seriesId }),
+  setSeriesTags: (seriesId: string, tagIds: string[]) =>
+    invoke<void>("set_series_tags", { seriesId, tagIds }),
+
+  // Поиск (опциональный фильтр по тегам технологий)
+  search: (query: string, tagIds: string[] = [], limit = 50) =>
+    invoke<SearchHit[]>("search", { query, tagIds, limit }),
 };

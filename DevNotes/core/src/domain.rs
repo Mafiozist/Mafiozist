@@ -63,6 +63,28 @@ pub struct NoteContent {
     pub updated_at: String,
 }
 
+/// Категория тега технологий (язык / фреймворк / инструмент …).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TechTagType {
+    pub id: String,
+    /// Название категории. В БД колонка называется `type`.
+    #[serde(rename = "type")]
+    pub type_name: String,
+}
+
+/// Тег технологии, которым помечаются серии заметок.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TechTag {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    /// Ссылка на категорию (может отсутствовать).
+    pub type_id: Option<String>,
+    /// Название категории (join из `tech_tag_type`), удобно для UI.
+    #[serde(rename = "typeName")]
+    pub type_name: Option<String>,
+}
+
 /// Результат полнотекстового поиска (одно совпадение — блок контента).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchHit {

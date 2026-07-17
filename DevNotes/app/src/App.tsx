@@ -6,6 +6,7 @@ import { ProjectSidebar } from "@/features/projects/ProjectSidebar";
 import { SeriesList } from "@/features/series/SeriesList";
 import { BlockEditor } from "@/features/content/BlockEditor";
 import { SearchPalette } from "@/features/search/SearchPalette";
+import { SyncButton } from "@/features/sync/SyncButton";
 import { useUiStore } from "@/stores/uiStore";
 
 export default function App() {
@@ -31,14 +32,17 @@ export default function App() {
           <Terminal size={18} />
           <span className="text-sm font-bold tracking-widest">DEVNOTES</span>
         </div>
-        <button
-          onClick={() => setSearchOpen(true)}
-          className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent/60"
-        >
-          <Search size={14} />
-          Поиск
-          <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl K</kbd>
-        </button>
+        <div className="flex items-center gap-2">
+          <SyncButton />
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent/60"
+          >
+            <Search size={14} />
+            Поиск
+            <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl K</kbd>
+          </button>
+        </div>
       </header>
 
       {/* Трёхпанельная рабочая область */}

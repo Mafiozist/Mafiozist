@@ -11,6 +11,7 @@ use rusqlite::{params, params_from_iter, Connection};
 
 use crate::domain::{NoteContent, NoteSeries, Project, SearchHit, TechTag, TechTagType};
 use crate::ports::{Clock, IdGenerator};
+use crate::snapshot::Snapshot;
 use crate::{CoreError, Result};
 
 /// Строит строку placeholder'ов `?,?,…` для `IN (...)` c `n` элементами.
@@ -491,6 +492,154 @@ impl SqliteStore {
                 Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
         }
+    }
+}
+
+impl SqliteStore {
+    // --- Синхронизация: снапшоты ------------------------------------------
+
+    /// Выгружает полный слепок пользовательских данных.
+    pub fn export_snapshot(&self) -> Result<Snapshot> {
+        let projects = self.list_projects()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, project_id, title, description, created_at, updated_at FROM note_series",
+        )?;
+        let series = stmt
+            .query_map([], |row| {
+                Ok(NoteSeries {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    title: row.get(2)?,
+                    description: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, series_id, sort_order, title, text, type, created_at, updated_at
+             FROM note_content",
+        )?;
+        let contents = stmt
+            .query_map([], |row| {
+                Ok(NoteContent {
+                    id: row.get(0)?,
+                    series_id: row.get(1)?,
+                    sort_order: row.get(2)?,
+                    title: row.get(3)?,
+                    text: row.get(4)?,
+                    content_type: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let tag_types = self.list_tag_types()?;
+        let tags = self.list_tags()?;
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT series_id, tag_id FROM series_tag")?;
+        let series_tags = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(Snapshot {
+            projects,
+            series,
+            contents,
+            tag_types,
+            tags,
+            series_tags,
+        })
+    }
+
+    /// Сливает удалённый снапшот в локальную БД с разрешением конфликтов LWW
+    /// (по `updated_at`) для сущностей с датами; ассоциации сливаются объединением.
+    /// Возвращает число фактически применённых изменений (вставок/обновлений).
+    pub fn apply_snapshot(&self, snap: &Snapshot) -> Result<usize> {
+        let tx = self.conn.unchecked_transaction()?;
+        let mut applied = 0usize;
+
+        // Категории и теги — без updated_at (объединение/обновление полей).
+        for tt in &snap.tag_types {
+            applied += tx.execute(
+                "INSERT OR IGNORE INTO tech_tag_type (id, type) VALUES (?1, ?2)",
+                params![tt.id, tt.type_name],
+            )?;
+        }
+        for t in &snap.tags {
+            applied += tx.execute(
+                "INSERT INTO tech_tag (id, name, description, type_id) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO UPDATE SET
+                   name = excluded.name, description = excluded.description, type_id = excluded.type_id",
+                params![t.id, t.name, t.description, t.type_id],
+            )?;
+        }
+
+        // Проекты (LWW по updated_at).
+        for p in &snap.projects {
+            applied += tx.execute(
+                "INSERT INTO project (id, name, short_name, description, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(id) DO UPDATE SET
+                   name = excluded.name, short_name = excluded.short_name,
+                   description = excluded.description, updated_at = excluded.updated_at
+                 WHERE excluded.updated_at > project.updated_at",
+                params![
+                    p.id,
+                    p.name,
+                    p.short_name,
+                    p.description,
+                    p.created_at,
+                    p.updated_at
+                ],
+            )?;
+        }
+
+        // Серии (LWW).
+        for s in &snap.series {
+            applied += tx.execute(
+                "INSERT INTO note_series (id, project_id, title, description, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(id) DO UPDATE SET
+                   project_id = excluded.project_id, title = excluded.title,
+                   description = excluded.description, updated_at = excluded.updated_at
+                 WHERE excluded.updated_at > note_series.updated_at",
+                params![s.id, s.project_id, s.title, s.description, s.created_at, s.updated_at],
+            )?;
+        }
+
+        // Блоки (LWW; триггеры поддерживают FTS-индекс).
+        for c in &snap.contents {
+            applied += tx.execute(
+                "INSERT INTO note_content (id, series_id, sort_order, title, text, type, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(id) DO UPDATE SET
+                   series_id = excluded.series_id, sort_order = excluded.sort_order,
+                   title = excluded.title, text = excluded.text, type = excluded.type,
+                   updated_at = excluded.updated_at
+                 WHERE excluded.updated_at > note_content.updated_at",
+                params![
+                    c.id, c.series_id, c.sort_order, c.title, c.text, c.content_type,
+                    c.created_at, c.updated_at
+                ],
+            )?;
+        }
+
+        // Ассоциации серия ↔ тег (объединение).
+        for (series_id, tag_id) in &snap.series_tags {
+            applied += tx.execute(
+                "INSERT OR IGNORE INTO series_tag (series_id, tag_id) VALUES (?1, ?2)",
+                params![series_id, tag_id],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(applied)
     }
 }
 

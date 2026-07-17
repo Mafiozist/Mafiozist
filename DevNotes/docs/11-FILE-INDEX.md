@@ -56,7 +56,8 @@
 | `core/src/ports.rs` | Порты `Clock`/`IdGenerator` + `SystemClock`/`UuidV7Generator` | Interfaces | добавление портов |
 | `core/src/sqlite.rs` | `SqliteStore`: миграции, CRUD, каскады, reorder, FTS5-поиск | Infrastructure/DB | + методы; SQL синхронно со схемой |
 | `core/src/search.rs` | `to_fts_query` — безопасный FTS5-запрос из ввода | Domain/логика | правила токенизации |
-| `core/src/sync.rs` | `resolve` — LWW-разрешение конфликтов (чистая логика) | Domain/логика | стратегия конфликтов |
+| `core/src/snapshot.rs` | `Snapshot` — слепок данных для синхронизации | Domain | состав снапшота |
+| `core/src/sync.rs` | `resolve` (LWW), `SyncTransport`, `FileTransport`/`InMemoryTransport`, `sync()` | Domain/Infra | транспорты, стратегия конфликтов |
 | `core/src/service.rs` | `NotesService` — сценарии с валидацией | UseCases | бизнес-правила |
 | `core/tests/integration.rs` | 9 интеграционных тестов (реальный SQLite + FTS5) | Тесты | добавлять сценарии |
 
@@ -97,6 +98,7 @@
 | `app/src/features/search/SearchPalette.tsx` | Командная палитра поиска (Ctrl/Cmd+K) + фильтр по тегам | UI/логика |
 | `app/src/features/tags/TagSelector.tsx` | Селектор тегов: дропдаун с поиском/чипами/созданием | UI/логика |
 | `app/src/features/tags/SeriesTagsBar.tsx` | Панель тегов серии (показ + назначение) | UI/логика |
+| `app/src/features/sync/SyncButton.tsx` | Кнопка синхронизации (обмен снапшотом через файл) | UI/логика |
 | `app/src/styles/tokens.css` | Дизайн-токены HSL (терминальная тема) | тема/цвета |
 
 ## Код: корень репозитория

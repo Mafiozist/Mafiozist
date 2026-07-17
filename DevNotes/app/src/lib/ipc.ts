@@ -13,6 +13,7 @@ import type {
   ContentType,
   TechTag,
   TechTagType,
+  SyncReport,
 } from "@/domain/types";
 
 /** Признак запуска внутри Tauri (иначе — браузерный мок). */
@@ -109,6 +110,8 @@ class MockBackend {
             (a.limit as number | undefined) ?? 50,
           ),
         );
+      case "sync_file":
+        return r(this.syncFile());
       default:
         return Promise.reject(new Error(`mock: неизвестная команда ${command}`));
     }
@@ -247,6 +250,20 @@ class MockBackend {
       if (tagIds.every((id) => owned.has(id))) result.add(s.id);
     }
     return result;
+  }
+
+  // --- Синхронизация (браузерная заглушка) --------------------------------
+
+  /** В браузере нет файловой системы — возвращаем правдоподобный отчёт (объём данных). */
+  private syncFile(): SyncReport {
+    const bytes = JSON.stringify({
+      projects: this.projects,
+      series: this.series,
+      contents: this.contents,
+      tags: this.tags,
+      seriesTags: this.seriesTags,
+    }).length;
+    return { applied: 0, uploaded_bytes: bytes };
   }
 
   // --- Поиск --------------------------------------------------------------

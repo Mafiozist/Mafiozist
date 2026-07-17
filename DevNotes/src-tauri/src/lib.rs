@@ -10,6 +10,7 @@ use devnotes_core::domain::{NoteContent, NoteSeries, Project, SearchHit, TechTag
 use devnotes_core::ports::{SystemClock, UuidV7Generator};
 use devnotes_core::service::NotesService;
 use devnotes_core::sqlite::SqliteStore;
+use devnotes_core::sync::SyncReport;
 use tauri::{Manager, State};
 
 /// Глобальное состояние приложения: сервис за мьютексом (SQLite-соединение
@@ -194,6 +195,14 @@ fn search(
     svc.search(&query, &refs, limit.unwrap_or(50)).map_err(to_err)
 }
 
+// --- Команды: синхронизация ------------------------------------------------
+
+#[tauri::command]
+fn sync_file(state: State<AppState>, path: String) -> CmdResult<SyncReport> {
+    let svc = state.0.lock().map_err(to_err)?;
+    svc.sync_file(&path).map_err(to_err)
+}
+
 /// Инициализирует хранилище в каталоге данных приложения и запускает окно.
 ///
 /// БД лежит в `app_data_dir/devnotes.sqlite`; при первом запуске применяются миграции.
@@ -239,6 +248,7 @@ pub fn run() {
             list_tags_for_series,
             set_series_tags,
             search,
+            sync_file,
         ])
         .run(tauri::generate_context!())
         .expect("ошибка запуска приложения DEVNOTES");

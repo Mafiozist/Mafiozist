@@ -176,4 +176,13 @@ impl NotesService {
     pub fn search(&self, raw: &str, tag_ids: &[&str], limit: i64) -> Result<Vec<SearchHit>> {
         self.store.search(raw, tag_ids, limit.clamp(1, 500))
     }
+
+    // --- Синхронизация -----------------------------------------------------
+
+    /// Синхронизирует БД со снапшотом в файле (например, в папке Яндекс.Диска).
+    /// Двусторонне: скачивает удалённый снапшот, сливает (LWW), выгружает объединённый.
+    pub fn sync_file(&self, path: &str) -> Result<crate::sync::SyncReport> {
+        let transport = crate::sync::FileTransport::new(path);
+        crate::sync::sync(&self.store, &transport)
+    }
 }

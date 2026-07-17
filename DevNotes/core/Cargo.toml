@@ -20,5 +20,7 @@ uuid = { version = "1", features = ["v7"] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 # serde — сериализация доменных типов для IPC/экспорта.
 serde = { version = "1", features = ["derive"] }
+# serde_json — сериализация снапшота для синхронизации.
+serde_json = "1"
 # thiserror — эргономичные доменные ошибки.
 thiserror = "1"

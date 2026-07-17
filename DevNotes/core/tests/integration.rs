@@ -5,11 +5,13 @@
 //! См. `docs/13-TESTING.md`.
 
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use devnotes_core::domain::content_type;
 use devnotes_core::ports::{Clock, IdGenerator};
 use devnotes_core::service::NotesService;
 use devnotes_core::sqlite::SqliteStore;
+use devnotes_core::sync::{sync, InMemoryTransport};
 use devnotes_core::CoreError;
 
 /// Часы, выдающие строго возрастающие метки времени — детерминированный порядок сортировки.
@@ -31,21 +33,37 @@ impl Clock for FixedClock {
     }
 }
 
-/// Последовательный генератор id — предсказуемые идентификаторы в тестах.
+/// Часы поверх ОБЩЕГО счётчика — глобально возрастающее время между несколькими
+/// «устройствами» (нужно для детерминированного LWW в тестах синхронизации).
+struct SharedClock(Arc<AtomicU32>);
+impl Clock for SharedClock {
+    fn now_rfc3339(&self) -> String {
+        let n = self.0.fetch_add(1, Ordering::SeqCst);
+        format!("2026-07-17T10:{:02}:{:02}Z", n / 60, n % 60)
+    }
+}
+
+/// Последовательный генератор id с префиксом — предсказуемые и уникальные между
+/// устройствами идентификаторы в тестах.
 struct SeqIds {
     counter: AtomicU32,
+    prefix: String,
 }
 impl SeqIds {
     fn new() -> Self {
+        Self::with_prefix("id")
+    }
+    fn with_prefix(prefix: &str) -> Self {
         Self {
             counter: AtomicU32::new(0),
+            prefix: prefix.to_string(),
         }
     }
 }
 impl IdGenerator for SeqIds {
     fn new_id(&self) -> String {
         let n = self.counter.fetch_add(1, Ordering::SeqCst);
-        format!("id-{n:06}")
+        format!("{}-{n:06}", self.prefix)
     }
 }
 
@@ -53,6 +71,18 @@ impl IdGenerator for SeqIds {
 fn service() -> NotesService {
     let store = SqliteStore::open_in_memory(Box::new(FixedClock::new()), Box::new(SeqIds::new()))
         .expect("open in-memory db");
+    store.migrate().expect("run migrations");
+    NotesService::new(store)
+}
+
+/// Хелпер для тестов синхронизации: «устройство» с общим счётчиком времени
+/// и своим префиксом id.
+fn device(prefix: &str, clock: Arc<AtomicU32>) -> NotesService {
+    let store = SqliteStore::open_in_memory(
+        Box::new(SharedClock(clock)),
+        Box::new(SeqIds::with_prefix(prefix)),
+    )
+    .expect("open in-memory db");
     store.migrate().expect("run migrations");
     NotesService::new(store)
 }
@@ -306,6 +336,67 @@ fn search_filters_by_tags_with_and_semantics() {
             .unwrap()
             .len(),
         0
+    );
+}
+
+#[test]
+fn sync_converges_two_devices() {
+    let clock = Arc::new(AtomicU32::new(0));
+    let transport = InMemoryTransport::new();
+    let a = device("a", clock.clone());
+    let b = device("b", clock.clone());
+
+    // Устройство A создаёт данные и выгружает снапшот.
+    let sa = a.create_series(None, "Из A", None).unwrap();
+    a.add_content(&sa.id, None, "заметка_из_a", content_type::MARKDOWN)
+        .unwrap();
+    sync(a.store(), &transport).unwrap();
+
+    // Устройство B синхронизируется — подтягивает данные A.
+    let report = sync(b.store(), &transport).unwrap();
+    assert!(
+        report.applied > 0,
+        "B должен применить изменения из снапшота A"
+    );
+    assert_eq!(b.search("заметка_из_a", &[], 10).unwrap().len(), 1);
+
+    // B добавляет своё и выгружает; A подтягивает — состояния сходятся.
+    let sb = b.create_series(None, "Из B", None).unwrap();
+    b.add_content(&sb.id, None, "заметка_из_b", content_type::MARKDOWN)
+        .unwrap();
+    sync(b.store(), &transport).unwrap();
+    sync(a.store(), &transport).unwrap();
+    assert_eq!(a.search("заметка_из_b", &[], 10).unwrap().len(), 1);
+}
+
+#[test]
+fn sync_lww_newer_version_wins() {
+    let clock = Arc::new(AtomicU32::new(0));
+    let transport = InMemoryTransport::new();
+    let a = device("a", clock.clone());
+    let b = device("b", clock.clone());
+
+    // A создаёт блок v1 и делится; B подтягивает.
+    let s = a.create_series(None, "S", None).unwrap();
+    let c = a
+        .add_content(&s.id, None, "версия_v1", content_type::MARKDOWN)
+        .unwrap();
+    sync(a.store(), &transport).unwrap();
+    sync(b.store(), &transport).unwrap();
+    assert_eq!(b.search("версия_v1", &[], 10).unwrap().len(), 1);
+
+    // B обновляет блок ПОЗЖЕ (общие часы идут вперёд) и делится; A подтягивает.
+    b.update_content(&c.id, None, "версия_v2_от_b", content_type::MARKDOWN)
+        .unwrap();
+    sync(b.store(), &transport).unwrap();
+    sync(a.store(), &transport).unwrap();
+
+    // LWW: у A должна оказаться более новая версия из B.
+    assert_eq!(a.search("версия_v2_от_b", &[], 10).unwrap().len(), 1);
+    assert_eq!(
+        a.search("версия_v1", &[], 10).unwrap().len(),
+        0,
+        "старая версия вытеснена"
     );
 }
 

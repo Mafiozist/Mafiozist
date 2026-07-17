@@ -17,6 +17,7 @@ pub mod domain;
 pub mod ports;
 pub mod search;
 pub mod service;
+pub mod snapshot;
 pub mod sqlite;
 pub mod sync;
 

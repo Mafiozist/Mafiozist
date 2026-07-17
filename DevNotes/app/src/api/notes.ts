@@ -7,6 +7,7 @@ import type {
   NoteSeries,
   Project,
   SearchHit,
+  SyncReport,
   TechTag,
   TechTagType,
 } from "@/domain/types";
@@ -49,4 +50,7 @@ export const notesApi = {
   // Поиск (опциональный фильтр по тегам технологий)
   search: (query: string, tagIds: string[] = [], limit = 50) =>
     invoke<SearchHit[]>("search", { query, tagIds, limit }),
+
+  // Синхронизация: обмен снапшотом через файл (напр. в папке Яндекс.Диска)
+  syncFile: (path: string) => invoke<SyncReport>("sync_file", { path }),
 };

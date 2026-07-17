@@ -23,8 +23,13 @@ pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now_rfc3339(&self) -> String {
-        // unwrap безопасен: OffsetDateTime всегда форматируется в RFC3339.
+        // ПОЧЕМУ обнуляем наносекунды: RFC3339 с переменной дробной частью ломает
+        // лексикографическое сравнение updated_at, на котором построен LWW в SQL
+        // (см. sqlite::apply_snapshot). Точность до секунды даёт фиксированную ширину
+        // "…:SSZ", где строковый порядок == хронологический.
         OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .expect("0 is a valid nanosecond")
             .format(&Rfc3339)
             .expect("RFC3339 formatting cannot fail for a valid OffsetDateTime")
     }

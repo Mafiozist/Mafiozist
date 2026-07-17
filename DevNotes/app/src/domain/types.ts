@@ -62,3 +62,9 @@ export interface SearchHit {
   snippet: string;
   rank: number;
 }
+
+/** Итог синхронизации со снапшотом. */
+export interface SyncReport {
+  applied: number;
+  uploaded_bytes: number;
+}

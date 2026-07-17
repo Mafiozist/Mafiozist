@@ -40,6 +40,12 @@
 | И-7 | Внешние ключи включены | `PRAGMA foreign_keys = ON;` при каждом соединении |
 | И-8 | Мягкое удаление где важна история/синк; жёсткое — для связок | Поле `deleted_at TEXT NULL` (tombstone) на синкаемых сущностях |
 
+**Исключения из И-2 (осознанные, оформлены как исключения).** Пара `created_at`+`updated_at` обязательна для всех **настоящих доменных сущностей**. От неё отступают только три особые/несущностные таблицы:
+
+- **`note_version`** — неизменяемый снимок ревизии: несёт лишь `created_at`, поля `updated_at` нет (менять версию нельзя, см. §4.8).
+- **`setting`, `sync_state`** — плоские key-value таблицы, **не доменные сущности** и не синкаются: несут лишь `updated_at`. Момент первого появления ключа не имеет доменного смысла, поэтому `created_at` для них не заводится (в отличие от `note_version`, где отсутствует, наоборот, `updated_at`).
+- **`change_log`** — append-only журнал: вместо пары дат несёт единственную отметку `ts` (момент операции, основа LWW).
+
 **Почему UUID v7, а не autoincrement.** Local-first + офлайн-создание на нескольких устройствах: суррогатный автоинкремент даёт коллизии при слиянии. UUID v7 монотонно растёт по времени (первые 48 бит — Unix-время в мс), поэтому он одновременно уникален глобально **и** даёт естественную сортировку по created-порядку, что удобно для индексов и курсорной пагинации.
 
 **Тип хранения времени.** SQLite не имеет типа `DATETIME`; выбран `TEXT` в ISO 8601 UTC (а не Unix-epoch INTEGER) ради читаемости при отладке БД и корректной лексикографической сортировки. Точность — миллисекунды.
@@ -81,6 +87,8 @@
 ³ История версий — устройство-локальная (шумный, тяжёлый поток); на облако уходит только «текущее» состояние блока через oplog.
 ⁴ `setting` и `sync_state` — машинно-специфичны (пути, токены-ссылки, device_id), между устройствами не переносятся.
 
+> Все таблицы расширений входят в базовую схему (миграция `0001`, см. §5/§8.3). Разбивка «should/could» относится к **UI и фичам**, а не к DDL: схема стабильна с v1, чтобы синк и миграции не спотыкались о разный набор таблиц на разных устройствах.
+
 ### 2.3. Словарь синонимов (антидубли)
 
 | Канон | НЕ употреблять |
@@ -105,8 +113,11 @@ erDiagram
     TECH_TAG_TYPE ||--o{ TECH_TAG : "категоризирует"
     NOTE_CONTENT ||--o{ ATTACHMENT : "вложения"
     NOTE_CONTENT ||--o{ NOTE_VERSION : "история версий"
-    NOTE_SERIES ||--o{ NOTE_LINK : "исходящие ссылки"
-    NOTE_SERIES ||--o{ REMINDER : "напоминания"
+    NOTE_SERIES ||--o{ NOTE_LINK : "источник (source_series_id)"
+    NOTE_CONTENT ||--o{ NOTE_LINK : "блок-источник (source_content_id)"
+    NOTE_SERIES ||--o{ NOTE_LINK : "цель (target_series_id)"
+    NOTE_SERIES ||--o{ REMINDER : "напоминание по серии (series_id)"
+    NOTE_CONTENT ||--o{ REMINDER : "напоминание по блоку (content_id)"
 
     COMPANY {
         string id PK
@@ -236,7 +247,9 @@ erDiagram
     }
 ```
 
-> `notes_fts` (FTS5) на диаграмме не показана — это производная (индекс над `note_content` + `note_series`), не доменная связь. Детали — §6 и `04-SEARCH-FTS5.md`.
+> `notes_fts` (FTS5) на диаграмме не показана — это производная (индекс над `note_content` + `note_series`, через представление `notes_fts_src`, см. §6), не доменная связь. Детали — §6 и `04-SEARCH-FTS5.md`.
+>
+> `NOTE_LINK` присутствует на диаграмме тремя рёбрами — это три полноценных FK одной таблицы: `source_series_id` (обязательная серия-источник), `source_content_id` (опциональный блок-источник) и `target_series_id` (опциональная разрезолвленная цель). Аналогично `REMINDER` имеет два ребра-цели (`series_id` и `content_id`), из которых заполнено хотя бы одно (`CHECK`, §5).
 
 ### 3.1. Кардинальности и правила каскадов
 
@@ -251,8 +264,11 @@ erDiagram
 | Project ↔ TechTag | M:N | `CASCADE` | То же |
 | NoteContent → Attachment | 1:N | `CASCADE` | Вложение без блока бессмысленно |
 | NoteContent → NoteVersion | 1:N | `CASCADE` | История уходит вместе с блоком |
-| NoteSeries → NoteLink | 1:N | `CASCADE` | Исходящие ссылки удаляются с серией |
+| NoteSeries → NoteLink (source) | 1:N | `CASCADE` | Исходящие ссылки удаляются с серией-источником |
+| NoteContent → NoteLink (source) | 1:N | `CASCADE` | Ссылка-источник уходит с блоком |
+| NoteSeries → NoteLink (target) | 1:N | `SET NULL` | Удаление цели превращает ссылку в «висячую», а не рвёт её |
 | NoteSeries → Reminder | 1:N | `CASCADE` | Напоминание без цели бессмысленно |
+| NoteContent → Reminder | 1:N | `CASCADE` | То же для напоминания по блоку |
 
 > **Замечание о синке и удалении.** Для синкаемых сущностей «удаление» в UI = проставление `deleted_at` (tombstone) + запись `op='delete'` в `change_log`. Физический `DELETE ... CASCADE` применяется только при жёсткой очистке (compaction) уже синхронизированных tombstone'ов. Это гарантирует, что удаление доедет до второго устройства через oplog, а не «воскреснет».
 
@@ -275,7 +291,7 @@ erDiagram
 | Поле | Тип | Null | Смысл |
 | --- | --- | --- | --- |
 | `project_id` | TEXT | да | FK на `project`; NULL = «инбокс» |
-| `title` | TEXT | нет | Заголовок серии (индексируется FTS5) |
+| `title` | TEXT | нет | Заголовок серии (индексируется FTS5 как `series_title`) |
 | `description` | TEXT | да | Краткое описание |
 | `pinned` | INTEGER | нет | 0/1; закрепление вверху списка |
 
@@ -341,7 +357,7 @@ erDiagram
 | `revision` | Порядковый номер ревизии (1..N) |
 | `title` / `text` | Снимок содержимого на момент ревизии |
 | `diff` | Unified-diff к предыдущей ревизии (для компактного показа/отката) |
-| `created_at` | Момент создания ревизии (нет `updated_at` — версия неизменяема) |
+| `created_at` | Момент создания ревизии (нет `updated_at` — версия неизменяема, см. исключение в §1) |
 
 ### 4.9. `reminder`
 | Поле | Смысл |
@@ -352,7 +368,7 @@ erDiagram
 | `note` | Текст напоминания |
 
 ### 4.10. `setting` / `sync_state` (key-value)
-Плоские таблицы `key TEXT PRIMARY KEY, value TEXT, updated_at TEXT`. Примеры ключей:
+Плоские таблицы `key TEXT PRIMARY KEY, value TEXT, updated_at TEXT` (без `created_at` — исключение из И-2, см. §1). Примеры ключей:
 - `setting`: `theme=dark`, `locale=ru`, `autosave.debounce_ms=600`, `backup.interval_h=24`.
 - `sync_state`: `device_id=<uuid>`, `yadisk.cursor=<opaque>`, `yadisk.last_revision=<n>`, `oplog.last_pushed_ts=<iso>`.
 
@@ -364,7 +380,7 @@ erDiagram
 | `entity_id` | ID изменённой строки |
 | `op` | `insert` \| `update` \| `delete` |
 | `payload_json` | Снимок/дельта строки (для применения на др. устройстве) |
-| `ts` | UTC ISO 8601 момента операции (основа LWW) |
+| `ts` | UTC ISO 8601 момента операции (основа LWW; отдельного `created_at`/`updated_at` нет — журнал append-only, см. §1) |
 | `device_id` | Устройство-источник |
 | `synced` | 0/1 — выгружено ли в app folder Я.Диска |
 
@@ -374,7 +390,7 @@ erDiagram
 
 ## 5. Полный DDL SQLite
 
-> Порядок: `PRAGMA` → справочники → ядро → связки → расширения → служебные → FTS5 → триггеры. Весь DDL идемпотентен в рамках миграции `0001` (создание с нуля). Числовые флаги через `CHECK (col IN (0,1))`.
+> **Область раздела.** Ниже приведён **консолидированный конечный вид схемы** — все таблицы, индексы и ограничения в одном месте для чтения. Физически этот DDL создаётся не одним оператором, а распределён по миграциям согласно реестру §8.3: базовые таблицы (ядро, связки, расширения, служебные) и их индексы — миграция `0001`; сиды справочников — `0002`; представление-источник + `notes_fts` + FTS-триггеры (§6, §7.1) — `0003`; touch-триггеры (§7.2) — `0004`. Порядок изложения здесь: `PRAGMA` → справочники → ядро → связки → расширения → служебные (FTS5 и триггеры вынесены в §6–§7). Числовые флаги — через `CHECK (col IN (0,1))`.
 
 ```sql
 -- === PRAGMA (устанавливаются на каждое соединение в Rust-слое) ===
@@ -384,7 +400,7 @@ PRAGMA busy_timeout = 5000;       -- ждать блокировку до 5 c
 PRAGMA synchronous = NORMAL;      -- баланс скорость/надёжность при WAL
 
 -- ============================================================
---  СПРАВОЧНИКИ (seed через миграцию)
+--  СПРАВОЧНИКИ (seed через миграцию 0002)
 -- ============================================================
 CREATE TABLE note_content_type (
     id   INTEGER PRIMARY KEY,
@@ -480,7 +496,7 @@ CREATE TABLE project_tag (
 );
 
 -- ============================================================
---  РАСШИРЕНИЯ ДЕСКТОПА
+--  РАСШИРЕНИЯ ДЕСКТОПА (входят в базовую схему, миграция 0001)
 -- ============================================================
 CREATE TABLE attachment (
     id              TEXT PRIMARY KEY NOT NULL,
@@ -550,13 +566,13 @@ CREATE INDEX ix_reminder_due ON reminder (remind_at) WHERE done = 0;
 CREATE TABLE setting (
     key        TEXT PRIMARY KEY NOT NULL,
     value      TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL                  -- created_at не нужен (см. §1)
 );
 
 CREATE TABLE sync_state (
     key        TEXT PRIMARY KEY NOT NULL,
     value      TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL                  -- created_at не нужен (см. §1)
 );
 
 CREATE TABLE change_log (
@@ -582,25 +598,42 @@ CREATE INDEX ix_content_type     ON note_content (type_id);
 CREATE INDEX ix_project_archived ON project (archived) WHERE deleted_at IS NULL;
 ```
 
+> Виртуальная таблица `notes_fts`, представление-источник `notes_fts_src` и триггеры вынесены отдельно — см. §6 (создаётся миграцией `0003`) и §7 (триггеры `0003`/`0004`), чтобы не перемешивать доменную схему с производным индексом.
+
 ---
 
 ## 6. FTS5: виртуальная таблица поиска
 
-Полнотекстовый индекс — **external content** над `note_content` (поля `title`, `text`) плюс заголовок серии, подмешиваемый как отдельная колонка. Ранжирование — `bm25`. Целевой SLA — **<50 мс на 10k блоков**. Токенизатор по умолчанию `unicode61` (быстрый, точные словоформы); для русской морфологии предусмотрен fallback на `trigram` (см. риск в WBS и `04-SEARCH-FTS5.md`).
+Полнотекстовый индекс — **external content** над **представлением** `notes_fts_src`, которое объединяет блок (`note_content.title`, `note_content.text`) с заголовком его серии (`note_series.title`). Ранжирование — `bm25`. Целевой SLA — **<50 мс на 10k блоков**. Токенизатор по умолчанию `unicode61` (быстрый, точные словоформы); для русской морфологии предусмотрен fallback на `trigram` (см. риск в WBS и `04-SEARCH-FTS5.md`).
+
+**Почему представление, а не `content='note_content'` напрямую.** Индекс несёт колонку `series_title`, которой в таблице `note_content` нет. Для external-content FTS5 при `'rebuild'` и при извлечении значений для `snippet()`/`highlight()` выполняет `SELECT <колонки> FROM <источник>`. Если источником указать саму `note_content`, этот запрос упадёт с `no such column: series_title`. Поэтому источником объявлено представление `notes_fts_src`, где `series_title` — настоящая колонка (из `JOIN note_series`). Триггеры §7.1 при этом всё равно наполняют индекс вручную (external content не обновляется сам), а представление нужно именно для корректных `rebuild`/`snippet`/`highlight`.
 
 ```sql
--- external content: строки хранит note_content, FTS хранит только индекс
+-- Источник контента для внешнего FTS. Из него FTS5 читает значения колонок
+-- при 'rebuild' и при snippet()/highlight(). rowid представления = rowid блока.
+CREATE VIEW notes_fts_src AS
+    SELECT
+        c.rowid AS rowid,          -- целочисленный rowid note_content = content_rowid
+        c.title AS title,          -- note_content.title
+        c.text  AS text,           -- note_content.text
+        s.title AS series_title    -- note_series.title (денормализовано в индекс)
+    FROM note_content c
+    JOIN note_series  s ON s.id = c.series_id;
+
+-- external content: строки хранит note_content (через представление), FTS — только индекс
 CREATE VIRTUAL TABLE notes_fts USING fts5 (
     title,                 -- note_content.title
     text,                  -- note_content.text
-    series_title,          -- note_series.title (денормализовано в индекс)
-    content='note_content',
+    series_title,          -- note_series.title (через notes_fts_src)
+    content='notes_fts_src',
     content_rowid='rowid',
     tokenize = 'unicode61 remove_diacritics 2'
 );
 ```
 
 > `content_rowid` = скрытый `rowid` таблицы `note_content` (не UUID — FTS5 требует INTEGER rowid). Маппинг `rowid → id (UUID)` берётся из `note_content` при выдаче результатов.
+>
+> **Нестабильность `rowid` (важно для восстановления).** При `TEXT PRIMARY KEY` у `note_content` целочисленный `rowid` — неявный и **нестабильный**: обычный `VACUUM` и восстановление из `VACUUM INTO`-snapshot могут перенумеровать `rowid`, после чего внешний индекс молча укажет на чужие строки. Правило: **после любого `VACUUM` и после восстановления из snapshot обязателен полный rebuild** `notes_fts` (см. §8.1 и §8.4). В штатной работе (без VACUUM/restore) `rowid` стабилен, и триггеры §7.1 поддерживают индекс инкрементно.
 
 ### 6.1. Пример поискового запроса с bm25 и сниппетом
 ```sql
@@ -608,7 +641,7 @@ SELECT
     c.id,
     c.series_id,
     snippet(notes_fts, 1, '<mark>', '</mark>', '…', 12) AS snippet,
-    bm25(notes_fts, 5.0, 1.0, 3.0)                      AS rank  -- веса: title>series>text
+    bm25(notes_fts, 5.0, 1.0, 3.0)                      AS rank  -- веса: title>series_title>text
 FROM notes_fts
 JOIN note_content c ON c.rowid = notes_fts.rowid
 WHERE notes_fts MATCH :query
@@ -617,6 +650,8 @@ ORDER BY rank            -- bm25: меньше = релевантнее
 LIMIT 50;
 ```
 
+> `snippet(notes_fts, 1, …)` — колонка с индексом 1 (`text`). `bm25(notes_fts, 5.0, 1.0, 3.0)` задаёт веса колонок в порядке объявления: `title`=5, `text`=1, `series_title`=3 (важность `title > series_title > text`). Извлечение сниппета работает потому, что источником индекса объявлено представление `notes_fts_src`, из которого FTS5 достаёт текст колонки по `rowid`. Фильтр `c.deleted_at IS NULL` — дополнительная страховка: удалённые блоки и так изымаются из индекса триггером §7.1.
+
 ---
 
 ## 7. Триггеры
@@ -624,9 +659,15 @@ LIMIT 50;
 Две группы: (7.1) синхронизация FTS-индекса с `note_content`/`note_series`; (7.2) сопровождающие поля (`updated_at`). Бизнес-триггеры (запись в `change_log`, история версий) — **в use-case-слое Rust**, не в БД: это осознанное решение (тестируемость, единая транзакция, контроль device_id).
 
 ### 7.1. Синхронизация FTS5 (external content)
+
+Индексируются **только активные** блоки (`deleted_at IS NULL`). Ключевой момент: при **мягком удалении** (проставлении `deleted_at`) строку нужно **изъять** из индекса, иначе tombstone навсегда останется в `notes_fts`, раздует индекс и исказит статистику `bm25`; при **снятии** tombstone (восстановлении) — вернуть обратно. Поэтому UPDATE разбит на три триггера с взаимоисключающими `WHEN` (полный компромисс и альтернатива «contentless»-варианта — в `04-SEARCH-FTS5.md`).
+
+Колонки, которыми триггеры наполняют индекс (`title`, `text`, `series_title`), совпадают с колонками представления `notes_fts_src` (§6).
+
 ```sql
--- INSERT блока -> добавить в индекс
-CREATE TRIGGER trg_content_ai AFTER INSERT ON note_content BEGIN
+-- INSERT блока -> добавить в индекс (только если блок не создан уже удалённым)
+CREATE TRIGGER trg_content_ai AFTER INSERT ON note_content
+WHEN new.deleted_at IS NULL BEGIN
   INSERT INTO notes_fts(rowid, title, text, series_title)
   VALUES (
     new.rowid, new.title, new.text,
@@ -634,15 +675,17 @@ CREATE TRIGGER trg_content_ai AFTER INSERT ON note_content BEGIN
   );
 END;
 
--- DELETE блока -> изъять из индекса (спецсинтаксис external content)
-CREATE TRIGGER trg_content_ad AFTER DELETE ON note_content BEGIN
+-- HARD DELETE блока -> изъять из индекса (только если он там был, т.е. был активен)
+CREATE TRIGGER trg_content_ad AFTER DELETE ON note_content
+WHEN old.deleted_at IS NULL BEGIN
   INSERT INTO notes_fts(notes_fts, rowid, title, text, series_title)
   VALUES ('delete', old.rowid, old.title, old.text,
           (SELECT title FROM note_series WHERE id = old.series_id));
 END;
 
--- UPDATE блока -> delete+insert в индексе
-CREATE TRIGGER trg_content_au AFTER UPDATE ON note_content BEGIN
+-- UPDATE активного блока (остаётся активным) -> delete+insert в индексе (реиндекс)
+CREATE TRIGGER trg_content_au AFTER UPDATE ON note_content
+WHEN old.deleted_at IS NULL AND new.deleted_at IS NULL BEGIN
   INSERT INTO notes_fts(notes_fts, rowid, title, text, series_title)
   VALUES ('delete', old.rowid, old.title, old.text,
           (SELECT title FROM note_series WHERE id = old.series_id));
@@ -651,16 +694,34 @@ CREATE TRIGGER trg_content_au AFTER UPDATE ON note_content BEGIN
           (SELECT title FROM note_series WHERE id = new.series_id));
 END;
 
--- переименование серии -> обновить series_title во всех её блоках в индексе
+-- МЯГКОЕ УДАЛЕНИЕ (проставлен deleted_at) -> изъять tombstone-строку из индекса
+CREATE TRIGGER trg_content_soft_delete AFTER UPDATE ON note_content
+WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
+  INSERT INTO notes_fts(notes_fts, rowid, title, text, series_title)
+  VALUES ('delete', old.rowid, old.title, old.text,
+          (SELECT title FROM note_series WHERE id = old.series_id));
+END;
+
+-- ВОССТАНОВЛЕНИЕ (deleted_at снят) -> вернуть блок в индекс
+CREATE TRIGGER trg_content_restore AFTER UPDATE ON note_content
+WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL BEGIN
+  INSERT INTO notes_fts(rowid, title, text, series_title)
+  VALUES (new.rowid, new.title, new.text,
+          (SELECT title FROM note_series WHERE id = new.series_id));
+END;
+
+-- переименование серии -> обновить series_title во всех её АКТИВНЫХ блоках в индексе
 CREATE TRIGGER trg_series_title_au AFTER UPDATE OF title ON note_series BEGIN
   INSERT INTO notes_fts(notes_fts, rowid, title, text, series_title)
   SELECT 'delete', c.rowid, c.title, c.text, old.title
-  FROM note_content c WHERE c.series_id = new.id;
+  FROM note_content c WHERE c.series_id = new.id AND c.deleted_at IS NULL;
   INSERT INTO notes_fts(rowid, title, text, series_title)
   SELECT c.rowid, c.title, c.text, new.title
-  FROM note_content c WHERE c.series_id = new.id;
+  FROM note_content c WHERE c.series_id = new.id AND c.deleted_at IS NULL;
 END;
 ```
+
+> **Инвариант непротиворечивости.** Ветки `trg_content_au` / `trg_content_soft_delete` / `trg_content_restore` имеют взаимоисключающие `WHEN` по паре `(old.deleted_at, new.deleted_at)`, поэтому на любой UPDATE срабатывает **ровно одна** из них — двойной вставки/удаления в индексе не бывает. `trg_content_ad` и `trg_content_ai` фильтруют по `deleted_at`, чтобы не изымать то, чего в индексе нет, и не индексировать tombstone.
 
 ### 7.2. Автообновление `updated_at`
 ```sql
@@ -669,9 +730,17 @@ FOR EACH ROW WHEN new.updated_at = old.updated_at BEGIN
   UPDATE project SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
   WHERE id = old.id;
 END;
--- Аналогичные trg_*_touch для note_series, note_content, tech_tag,
--- attachment, note_link, reminder (по одному шаблону).
+-- Аналогичные trg_*_touch по одному шаблону для КАЖДОЙ синкаемой доменной сущности
+-- с парой created_at/updated_at:
+--   company, note_series, note_content, tech_tag,
+--   attachment, note_link, reminder.
 ```
+
+**Кто НЕ получает touch-триггер и почему:**
+- `note_version` — неизменяема, поля `updated_at` нет (§4.8);
+- `change_log` — append-only журнал, строки не апдейтятся (кроме флага `synced`, который меняется кодом синка осознанно и не должен «трогать» несуществующий `updated_at`);
+- `setting`, `sync_state` — плоские key-value; их единственный `updated_at` проставляется явно в коде при записи ключа, отдельный триггер избыточен;
+- справочники `note_content_type`, `tech_tag_type` и связки `note_series_tag`, `project_tag` — без пары дат (seed / чистая связка).
 
 > Условие `WHEN new.updated_at = old.updated_at` предотвращает рекурсию и уважает `updated_at`, уже проставленный из кода (при применении oplog с чужого устройства сохраняем исходный `ts`, иначе LWW сломается).
 
@@ -684,6 +753,7 @@ END;
 - Миграции **аддитивны и необратимы вперёд**: только `ADD COLUMN`, новые таблицы/индексы, backfill. Ломающие изменения — через паттерн «новая таблица + копирование + swap» (SQLite не умеет `DROP COLUMN` до 3.35 надёжно; полагаться нельзя из-за старых WebView-сборок).
 - Скрипты встроены в бинарь Rust-ядра (`include_str!`), применяются на старте до открытия репозиториев.
 - Перед структурной миграцией — авто-`VACUUM INTO` snapshot (см. `03-FEATURES`/бэкапы) для отката.
+- **Процедура восстановления/VACUUM и FTS.** После **восстановления из snapshot** (`VACUUM INTO`-файл), а также после **любого `VACUUM`** основной БД, обязателен шаг **полного rebuild** индекса: `INSERT INTO notes_fts(notes_fts) VALUES('rebuild');`. Причина — нестабильность неявного `rowid` при `TEXT PRIMARY KEY` (§6): без rebuild внешний индекс может указывать на перенумерованные строки. Этот шаг зашивается в код восстановления/обслуживания как неотделимый от VACUUM/restore.
 
 ### 8.2. Раннер (псевдо-Rust)
 ```rust
@@ -705,20 +775,20 @@ fn migrate(conn: &Connection) -> Result<()> {
 ### 8.3. Реестр миграций (план)
 | Версия | Файл | Содержимое |
 | --- | --- | --- |
-| 1 | `0001_init.sql` | Все таблицы ядра, связки, служебные, индексы (§5) |
+| 1 | `0001_init.sql` | **Все** таблицы (ядро, связки, расширения `attachment`/`note_link`/`note_version`/`reminder`, служебные) и их индексы (§5) |
 | 2 | `0002_seed_types.sql` | Seed `note_content_type`, `tech_tag_type` |
-| 3 | `0003_fts.sql` | `notes_fts` + триггеры §7.1; начальный rebuild индекса |
-| 4 | `0004_touch_triggers.sql` | Триггеры `updated_at` §7.2 |
-| 5 | `0005_attachments.sql` | `attachment` (если выносится из ядра как should-фича) |
-| 6 | `0006_wiki_versions.sql` | `note_link`, `note_version` (could-фичи) |
-| 7 | `0007_reminders.sql` | `reminder` |
+| 3 | `0003_fts.sql` | Представление `notes_fts_src` + `notes_fts` + триггеры §7.1; начальный rebuild индекса |
+| 4 | `0004_touch_triggers.sql` | Touch-триггеры `updated_at` §7.2 (для всех синкаемых сущностей, включая `company`) |
 
-> **Ребилд FTS после схемных изменений**, затрагивающих индексируемые поля: `INSERT INTO notes_fts(notes_fts) VALUES('rebuild');`.
+> **Почему вся схема в `0001`, а не по фиче-миграциям.** Схема расширений (`attachment`, `note_link`, `note_version`, `reminder`) заведена сразу, хотя сами фичи — should/could (§2.2). Причины: (1) стабильный набор таблиц на всех устройствах упрощает синк и исключает расхождение схем; (2) touch-триггеры `0004` ссылаются на эти таблицы — при раздельных поздних миграциях миграция триггеров упала бы на несуществующих таблицах. Гейтинг should/could-функций — на уровне UI/use-case, а не DDL.
+>
+> **Начальный rebuild в `0003`.** Сразу после создания `notes_fts` выполняется `INSERT INTO notes_fts(notes_fts) VALUES('rebuild');` — он читает данные из представления `notes_fts_src` (`SELECT rowid, title, text, series_title FROM notes_fts_src`) и наполняет индекс. Именно ради корректного `rebuild` источником объявлено представление, а не голая `note_content` (§6).
 
 ### 8.4. Правила эволюции
 - Никогда не переиспользовать номер `user_version`.
 - Backfill больших таблиц — батчами по rowid, чтобы не держать долгую блокировку при WAL.
-- Изменение набора индексируемых FTS-полей = новая миграция + `rebuild`.
+- Изменение набора индексируемых FTS-полей = новая миграция + `rebuild` (`INSERT INTO notes_fts(notes_fts) VALUES('rebuild');`).
+- **После VACUUM / восстановления из snapshot — обязательный полный `rebuild` `notes_fts`** (см. §6, §8.1): неявный `rowid` мог быть перенумерован, инкрементного пути коррекции нет.
 - Совместимость синка: добавление поля не ломает oplog (payload_json версионируется своим `schema_version` в `sync_state`).
 
 ---
@@ -740,7 +810,7 @@ fn migrate(conn: &Connection) -> Result<()> {
 
 **Ключевые сдвиги парадигмы Portfolio → DEVNOTES:**
 1. **ID**: EF-автоинкремент/GUID сервера → **клиентский UUID v7 строкой** (условие офлайн-создания).
-2. **Время**: `CreatedAt?` (nullable, серверное) → **обязательные `created_at`+`updated_at`** UTC ISO 8601 у всех сущностей.
+2. **Время**: `CreatedAt?` (nullable, серверное) → **обязательные `created_at`+`updated_at`** UTC ISO 8601 у всех доменных сущностей (исключения — §1).
 3. **Тип блока/тега**: enum/навигация EF → явный FK на seed-справочник в SQLite.
 4. **Связи тегов**: неявные навигационные коллекции EF → явные таблицы-связки `note_series_tag`, `project_tag`.
 5. **Новое для local-first**: `attachment`, `note_link`, `note_version`, `reminder`, `setting`, `sync_state`, `change_log`, `notes_fts` — в Portfolio отсутствуют, добавлены под офлайн, синк и мгновенный поиск.
@@ -771,10 +841,9 @@ fn migrate(conn: &Connection) -> Result<()> {
 | --- | --- |
 | (1) Канонические имена сущностей | §2, §5 — строго `Project/NoteSeries/NoteContent/...` |
 | (2) ID = UUID v7 строкой, клиентский | §1 (И-1), §9 |
-| (3) UTC ISO 8601, `created_at`/`updated_at` обязательны | §1 (И-2,И-3), §5 DDL |
+| (3) UTC ISO 8601, `created_at`/`updated_at` обязательны (с явными исключениями) | §1 (И-2 + исключения), §5 DDL |
 | (4) snake_case в схеме, домен Pascal/camel | §1 (И-4), §9.1 |
-| (6) FTS5 external content + bm25 + триггеры, <50 мс | §6, §7.1 |
+| (6) FTS5 external content (через `notes_fts_src`) + bm25 + триггеры, <50 мс | §6, §7.1 |
 | (7) Синк через oplog `change_log`, LWW, файл БД не синкается | §2, §4.11, §3.1 |
 | (8) Слои Domain/UseCases/Interfaces/Infrastructure/UI | §9.1 |
 | (10) MVP без Company/Task/Experience | §2.1 (сноска 1), §9, §10 |
-```

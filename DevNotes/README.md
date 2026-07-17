@@ -2,7 +2,7 @@
 
 > **Что это за файл.** Корневой README репозитория `DevNotes/` — точка входа в проект. Здесь суть продукта, ключевые возможности, технологический стек, карта репозитория со ссылками на всю проектную документацию (`docs/*`), быстрый старт и статус. Для деталей архитектуры, схемы БД, синка и дизайна — переходите по ссылкам из блока «Связанные документы».
 
-> **Статус проекта:** `Проектирование / ТЗ готово`. Кодовой базы пока нет — репозиторий содержит проектную документацию. Реализация ведётся по [roadmap](docs/roadmap.md).
+> **Статус проекта:** `Проектирование / ТЗ готово`. Кодовой базы пока нет — репозиторий содержит проектную документацию. Реализация ведётся по дорожной карте [docs/10-ROADMAP.md](docs/10-ROADMAP.md).
 
 ---
 
@@ -10,18 +10,19 @@
 
 | Документ | О чём |
 |---|---|
-| [docs/vision.md](docs/vision.md) | Видение продукта, целевой пользователь, боль и сценарии использования |
-| [docs/architecture.md](docs/architecture.md) | Слои Clean Architecture, обоснование Tauri vs Electron/MAUI/Flutter, IPC-контур |
-| [docs/data-model.md](docs/data-model.md) | Доменная модель, ER-диаграмма, инварианты сущностей |
-| [docs/database.md](docs/database.md) | SQLite-схема (DDL), миграции, FTS5-индекс, триггеры |
-| [docs/search.md](docs/search.md) | Полнотекстовый поиск: FTS5 external content, bm25, снипеты, русская морфология |
-| [docs/sync.md](docs/sync.md) | Синхронизация с Яндекс.Диском: OAuth 2.0 + PKCE, oplog, LWW, конфликт-копии |
-| [docs/design-system.md](docs/design-system.md) | Дизайн-токены (HSL / shadcn), терминальная эстетика, компоненты, CVA |
-| [docs/ui-ux.md](docs/ui-ux.md) | Экраны, командная палитра, горячие клавиши, навигация |
-| [docs/roadmap.md](docs/roadmap.md) | MVP → Should → Could; вехи и порядок реализации |
-| [docs/wbs.md](docs/wbs.md) | Согласованный WBS (must / should / could / wont), риски |
+| [docs/01-VISION.md](docs/01-VISION.md) | Видение продукта, целевой пользователь, боль и сценарии использования |
+| [docs/02-SPECIFICATION.md](docs/02-SPECIFICATION.md) | Техническое задание и WBS (must / should / could / wont), инварианты, риски |
+| [docs/03-FEATURES.md](docs/03-FEATURES.md) | Каталог фич по приоритетам: MVP → Should → Could; критерии приёмки |
+| [docs/04-ARCHITECTURE.md](docs/04-ARCHITECTURE.md) | Слои Clean Architecture, обоснование Tauri vs Electron/MAUI/Flutter, IPC-контур |
+| [docs/05-DATA-MODEL.md](docs/05-DATA-MODEL.md) | Доменная модель, ER-диаграмма, инварианты, SQLite-схема (DDL), миграции |
+| [docs/06-UI-UX.md](docs/06-UI-UX.md) | Экраны, командная палитра, горячие клавиши, навигация, дизайн-токены, терминальная эстетика |
+| [docs/07-TECH-STACK.md](docs/07-TECH-STACK.md) | Технологический стек, версии, обоснование выбора библиотек |
+| [docs/08-SEARCH.md](docs/08-SEARCH.md) | Полнотекстовый поиск: FTS5 external content, bm25, сниппеты, русская морфология |
+| [docs/09-YANDEX-DISK.md](docs/09-YANDEX-DISK.md) | Синхронизация с Яндекс.Диском: OAuth 2.0 + PKCE, oplog, LWW, конфликт-копии |
+| [docs/10-ROADMAP.md](docs/10-ROADMAP.md) | Дорожная карта: вехи, порядок реализации, приоритезация WBS |
+| [docs/12-GLOSSARY.md](docs/12-GLOSSARY.md) | Единый глоссарий сущностей и терминов, инварианты именования |
 
-> Часть документов может быть в работе. Актуальность отслеживается в [roadmap](docs/roadmap.md).
+> Часть документов может быть в работе. Актуальность и порядок реализации отслеживаются в [docs/10-ROADMAP.md](docs/10-ROADMAP.md).
 
 ---
 
@@ -45,7 +46,7 @@
 ## Ключевые возможности
 
 - **Иерархия знаний.** `Project` → `NoteSeries` → `NoteContent`. Блоки контента типов **markdown / code / image / link**, сортировка drag-and-drop (`@dnd-kit`, поле `sort_order`).
-- **Мгновенный поиск.** SQLite **FTS5** (external content над `NoteContent` + `NoteSeries`), ранжирование **bm25**, подсветка снипетов. Цель — `<50 мс` на 10k блоков.
+- **Мгновенный поиск.** SQLite **FTS5** (external content над `NoteContent` + `NoteSeries`), ранжирование **bm25**, подсветка сниппетов. Цель — `<50 мс` на 10k блоков.
 - **Командная палитра `Ctrl/Cmd+K`.** Поиск, переход к проекту/серии, быстрые действия.
 - **Теги технологий.** `TechTag` с категориями `TechTagType` (язык / фреймворк / инструмент / БД / DevOps); фильтрация списков по тегу и проекту.
 - **Синк с Яндекс.Диском.** OAuth 2.0 Authorization Code + **PKCE** через loopback-redirect, область `app folder`; токены — в системном keychain. Офлайн-очередь изменений, конфликты — **LWW по `updated_at`** на уровне блока + конфликт-копия.
@@ -53,7 +54,7 @@
 - **Обязательные даты.** У каждой сущности `created_at` и `updated_at` — хранение UTC ISO 8601, отображение в локальной таймзоне.
 - **Терминальная тема.** Тёмная по умолчанию + светлая; HSL-токены в стиле shadcn/ui, `JetBrains Mono`, акцент `#22c55e`, terminal window, scanlines.
 
-**В планах (Should / Could):** экспорт серии в Markdown/PDF, вложения-изображения (content-addressable), локальные снапшоты (`VACUUM INTO`), избранное/архив, автосохранение черновиков, шаблоны серий, автообновление (Tauri Updater), версионирование блоков, wiki-links, шифрование БД (SQLCipher), quick-capture, WebDAV-каналы, AI-фичи. Подробности — в [roadmap](docs/roadmap.md) и [wbs](docs/wbs.md).
+**В планах (Should / Could):** экспорт серии в Markdown/PDF, вложения-изображения (content-addressable), локальные снапшоты (`VACUUM INTO`), избранное/архив, автосохранение черновиков, шаблоны серий, автообновление (Tauri Updater), версионирование блоков, wiki-links, шифрование БД (SQLCipher), quick-capture, WebDAV-каналы, AI-фичи. Подробности — в [docs/03-FEATURES.md](docs/03-FEATURES.md) и [docs/10-ROADMAP.md](docs/10-ROADMAP.md).
 
 ---
 
@@ -78,7 +79,7 @@
 | **UI/дизайн** | Tailwind, дизайн-токены HSL (shadcn/ui), CVA + clsx + tailwind-merge |
 | **Контент** | `@dnd-kit`, react-markdown, react-syntax-highlighter |
 
-> Обоснование выбора **Tauri 2.0** (vs Electron / .NET MAUI / Flutter) — в [docs/architecture.md](docs/architecture.md). Решение зафиксировано.
+> Полный стек с версиями и обоснованием библиотек — в [docs/07-TECH-STACK.md](docs/07-TECH-STACK.md). Обоснование выбора **Tauri 2.0** (vs Electron / .NET MAUI / Flutter) — в [docs/04-ARCHITECTURE.md](docs/04-ARCHITECTURE.md). Решение зафиксировано.
 
 ---
 
@@ -107,7 +108,7 @@ flowchart TB
     SYNC -->|oplog + snapshot| YD[(Я.Диск app folder)]
 ```
 
-Границы: вся бизнес-логика UI остаётся в TypeScript; Rust-слой намеренно тонкий (SQL + sync + IPC) — это снижает кривую обучения для .NET/React-команды. Детали и IPC-контракты — в [docs/architecture.md](docs/architecture.md).
+Границы: вся бизнес-логика UI остаётся в TypeScript; Rust-слой намеренно тонкий (SQL + sync + IPC) — это снижает кривую обучения для .NET/React-команды. Детали и IPC-контракты — в [docs/04-ARCHITECTURE.md](docs/04-ARCHITECTURE.md).
 
 ---
 
@@ -121,12 +122,14 @@ erDiagram
     NoteSeries }o--o{ TechTag : "NoteSeriesTag"
     TechTag }o--|| TechTagType : "категория"
     NoteContent ||--o{ Attachment : "вложения"
-    ChangeLog }o--|| Project : "op-журнал (любая сущность)"
 
     Project { string id PK "UUID v7" string name bool archived string created_at string updated_at }
     NoteSeries { string id PK string project_id FK string title bool pinned string created_at string updated_at }
     NoteContent { string id PK string series_id FK int sort_order string text string type string created_at string updated_at }
+    ChangeLog { string id PK string entity "имя сущности" string entity_id "UUID любой сущности" string op string created_at }
 ```
+
+> `ChangeLog` (oplog) намеренно показан **отдельным узлом без ребра-FK**: он полиморфен — ссылается на любую сущность парой (`entity`, `entity_id`) и не имеет жёсткого внешнего ключа на `Project` или иную конкретную таблицу. Модель журнала и правила синка — в [docs/05-DATA-MODEL.md](docs/05-DATA-MODEL.md) и [docs/09-YANDEX-DISK.md](docs/09-YANDEX-DISK.md).
 
 Инварианты (обязательны во всех документах):
 
@@ -135,7 +138,7 @@ erDiagram
 - **Даты — UTC ISO 8601 в БД**; поля `created_at` / `updated_at` обязательны у всех сущностей.
 - **SQLite: snake_case** в схеме; домен на Rust — PascalCase, на TS — camelCase.
 
-Полная модель, справочники и связи — в [docs/data-model.md](docs/data-model.md); DDL — в [docs/database.md](docs/database.md).
+Полная модель, справочники, связи и DDL — в [docs/05-DATA-MODEL.md](docs/05-DATA-MODEL.md).
 
 ---
 
@@ -143,18 +146,20 @@ erDiagram
 
 ```text
 DevNotes/
-├── README.md                  # этот файл — точка входа
+├── CLAUDE.md                  # состояние проекта и конвенции — обязательная точка входа для ассистента
+├── README.md                  # этот файл — точка входа для внешнего читателя
 ├── docs/                      # проектная документация
-│   ├── vision.md              # видение, пользователь, боль
-│   ├── architecture.md        # слои, обоснование Tauri, IPC
-│   ├── data-model.md          # доменная модель, ER-диаграмма
-│   ├── database.md            # SQLite DDL, миграции, FTS5, триггеры
-│   ├── search.md              # FTS5 / bm25 / снипеты / морфология
-│   ├── sync.md                # Яндекс.Диск, OAuth2+PKCE, oplog, LWW
-│   ├── design-system.md       # HSL-токены, терминальная эстетика, CVA
-│   ├── ui-ux.md               # экраны, командная палитра, хоткеи
-│   ├── roadmap.md             # MVP → Should → Could, вехи
-│   └── wbs.md                 # согласованный WBS + риски
+│   ├── 01-VISION.md           # видение, пользователь, боль
+│   ├── 02-SPECIFICATION.md    # ТЗ и WBS (must/should/could/wont), риски
+│   ├── 03-FEATURES.md         # каталог фич по приоритетам, критерии приёмки
+│   ├── 04-ARCHITECTURE.md     # слои, обоснование Tauri, IPC
+│   ├── 05-DATA-MODEL.md       # доменная модель, ER, DDL, миграции, FTS5-триггеры
+│   ├── 06-UI-UX.md            # экраны, командная палитра, хоткеи, дизайн-токены
+│   ├── 07-TECH-STACK.md       # стек, версии, обоснование библиотек
+│   ├── 08-SEARCH.md           # FTS5 / bm25 / сниппеты / морфология
+│   ├── 09-YANDEX-DISK.md      # Яндекс.Диск, OAuth2+PKCE, oplog, LWW
+│   ├── 10-ROADMAP.md          # дорожная карта, вехи, приоритезация WBS
+│   └── 12-GLOSSARY.md         # единый глоссарий сущностей и инвариантов
 │
 └── (планируется при реализации)
     ├── src-tauri/             # Rust-ядро: Domain/UseCases/Interfaces/Infrastructure
@@ -175,7 +180,7 @@ DevNotes/
 
 ## Быстрый старт
 
-> ⚠️ Проект на стадии проектирования — команды ниже **плейсхолдеры** и активируются по мере реализации (см. [roadmap](docs/roadmap.md)).
+> ⚠️ Проект на стадии проектирования — команды ниже **плейсхолдеры** и активируются по мере реализации (см. [docs/10-ROADMAP.md](docs/10-ROADMAP.md)).
 
 **Предпосылки (планируемые):**
 
@@ -197,7 +202,7 @@ pnpm tauri dev              # placeholder
 pnpm tauri build           # placeholder
 ```
 
-Локальная БД SQLite создаётся при первом запуске в пользовательской app-директории; миграции применяются автоматически. Настройка синка с Яндекс.Диском — в [docs/sync.md](docs/sync.md).
+Локальная БД SQLite создаётся при первом запуске в пользовательской app-директории; миграции применяются автоматически. Настройка синка с Яндекс.Диском — в [docs/09-YANDEX-DISK.md](docs/09-YANDEX-DISK.md).
 
 ---
 
@@ -222,12 +227,12 @@ pnpm tauri build           # placeholder
 
 | Аспект | Состояние |
 |---|---|
-| Концепция и ТЗ | ✅ Готово (WBS согласован) |
+| Концепция и ТЗ | ✅ Готово (WBS согласован, см. [docs/02-SPECIFICATION.md](docs/02-SPECIFICATION.md)) |
 | Проектная документация `docs/*` | 🟡 В работе |
 | Rust-ядро / фронтенд | ⬜ Не начато |
-| MVP (must-have) | ⬜ По roadmap |
+| MVP (must-have) | ⬜ По дорожной карте ([docs/10-ROADMAP.md](docs/10-ROADMAP.md)) |
 
-**Резюме:** _Проектирование / ТЗ готово, реализация — по [roadmap](docs/roadmap.md)._
+**Резюме:** _Проектирование / ТЗ готово, реализация — по дорожной карте ([docs/10-ROADMAP.md](docs/10-ROADMAP.md))._
 
 ---
 
@@ -237,4 +242,4 @@ pnpm tauri build           # placeholder
 
 ---
 
-_Все документы — на русском. Тон — инженерный, конкретный. Единый глоссарий и инварианты см. в [docs/wbs.md](docs/wbs.md) (раздел consistencyNotes)._
+_Все документы — на русском. Тон — инженерный, конкретный. Единый глоссарий сущностей и инварианты именования — в [docs/12-GLOSSARY.md](docs/12-GLOSSARY.md) и в [CLAUDE.md](CLAUDE.md) (раздел 3.5)._

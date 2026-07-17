@@ -8,17 +8,24 @@
 
 ## Связанные документы
 
+Полное оглавление всей документации — в [`00-INDEX.md`](./00-INDEX.md); реестр всех файлов репозитория — в [`11-FILE-INDEX.md`](./11-FILE-INDEX.md). Ниже — карта документов, на которые опирается это видение.
+
 | Документ | Назначение |
 |---|---|
+| [`00-INDEX.md`](./00-INDEX.md) | Единая точка входа, оглавление всей документации |
 | [`01-VISION.md`](./01-VISION.md) | **(этот файл)** Видение, персоны, сценарии, метрики |
 | [`02-ARCHITECTURE.md`](./02-ARCHITECTURE.md) | Слои Clean Architecture, выбор Tauri vs Electron/MAUI/Flutter, IPC-контур |
 | [`03-DATA-MODEL.md`](./03-DATA-MODEL.md) | Доменные сущности, SQLite-схема (snake_case), миграции, UUID v7 |
 | [`04-SEARCH-FTS5.md`](./04-SEARCH-FTS5.md) | FTS5 external content, bm25, триггеры, trigram-fallback, SLA <50 мс |
-| [`05-SYNC-YANDEX-DISK.md`](./05-SYNC-YANDEX-DISK.md) | OAuth 2.0 + PKCE, oplog (ChangeLog), LWW + конфликт-копии, app folder |
+| [`05-SYNC-YANDEX.md`](./05-SYNC-YANDEX.md) | OAuth 2.0 + PKCE, oplog (ChangeLog), LWW + конфликт-копии, app folder |
 | [`06-DESIGN-SYSTEM.md`](./06-DESIGN-SYSTEM.md) | HSL-токены shadcn/ui, терминальная эстетика, CVA-примитивы |
-| [`07-ROADMAP.md`](./07-ROADMAP.md) | WBS (must/should/could/wont), фазы, релизы |
+| [`07-ADR/`](./07-ADR/) | Architecture Decision Records (Tauri vs Electron/MAUI/Flutter и пр.) |
+| [`08-ROADMAP.md`](./08-ROADMAP.md) | WBS (must/should/could/wont), фазы, релизы |
+| [`09-RISKS.md`](./09-RISKS.md) | Реестр рисков и меры митигации |
+| [`10-CONVENTIONS.md`](./10-CONVENTIONS.md) | Подробные конвенции кода/именования/git |
+| [`11-FILE-INDEX.md`](./11-FILE-INDEX.md) | Реестр всех файлов репозитория с однострочным описанием |
 
-> Ссылки на 02–07 — плановые: файлы создаются по мере проработки. Имена сущностей и терминов во всех документах **строго едины** (см. блок «Глоссарий»).
+> Ссылки на 02–11 — плановые: файлы создаются по мере проработки (стадия проектирования). Наличие каждого файла сверяется по [`11-FILE-INDEX.md`](./11-FILE-INDEX.md). Имена сущностей и терминов во всех документах **строго едины** (см. блок «Глоссарий»).
 
 ---
 
@@ -163,7 +170,7 @@ flowchart LR
 |---|---|
 | S1 Быстрый захват | Local-first SQLite; CRUD иерархии; командная палитра; created_at/updated_at; автосейв debounce |
 | S2 Поиск | FTS5 + bm25 + сниппеты; фильтр по тегу/типу/дате; командная палитра |
-| S3 Серия | CRUD Project→Series→Content; drag-and-drop sort_order; теги; markdown/highlight; экспорт MD/PDF; pinned |
+| S3 Серия | CRUD Project→NoteSeries→NoteContent; drag-and-drop sort_order; теги; markdown/highlight; экспорт MD/PDF; pinned |
 | S4 Синк | OAuth 2.0 + PKCE; oplog (ChangeLog); LWW + конфликт-копия; app folder; snapshot |
 
 ---
@@ -259,7 +266,7 @@ flowchart LR
 | Мгновенный полнотекстовый поиск по всей базе | ~ | ~ | ~ | − | **+ (FTS5/bm25)** |
 | Данные в открытом локальном формате | − | + | − | + | **+ (SQLite)** |
 | Синк в *свой* Яндекс.Диск | − | ~ | − | ~ | **+** |
-| Инженерная модель Project→Series→Block + теги технологий | ~ | ~ | − | − | **+** |
+| Инженерная модель Project→NoteSeries→NoteContent + теги технологий | ~ | ~ | − | − | **+** |
 | Типизированные блоки + подсветка кода | + | + | − | ~ | **+** |
 | Терминально-хакерская эстетика | − | ~ | − | − | **+** |
 | Лёгкий бандл (Tauri) | − | ~ | − | + | **+ (<15 МБ)** |
@@ -315,4 +322,4 @@ flowchart LR
 - **AI-фичи:** автотегирование, суммаризация серии, семантический поиск.
 - **Статистика:** heatmap активности, распределение по технологиям.
 
-Детали и приоритеты — в [`07-ROADMAP.md`](./07-ROADMAP.md).
+Детали и приоритеты — в [`08-ROADMAP.md`](./08-ROADMAP.md).

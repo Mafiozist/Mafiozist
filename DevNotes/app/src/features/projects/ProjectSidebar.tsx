@@ -1,7 +1,7 @@
 // Левая панель: список проектов + создание. Выбор проекта фильтрует серии.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderGit2, Plus, Inbox } from "lucide-react";
+import { FolderGit2, Plus, Inbox, Trash2 } from "lucide-react";
 import { notesApi } from "@/api/notes";
 import { queryKeys } from "@/api/queryKeys";
 import { useUiStore } from "@/stores/uiStore";
@@ -25,6 +25,15 @@ export function ProjectSidebar() {
     onSuccess: () => {
       setName("");
       qc.invalidateQueries({ queryKey: queryKeys.projects });
+    },
+  });
+
+  const deleteProject = useMutation({
+    mutationFn: (id: string) => notesApi.deleteProject(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: queryKeys.projects });
+      // Если удалили выбранный проект — вернуться во «Входящие».
+      if (selectedProjectId === id) selectProject(null);
     },
   });
 
@@ -55,6 +64,11 @@ export function ProjectSidebar() {
             icon={<FolderGit2 size={16} />}
             label={p.name}
             onClick={() => selectProject(p.id)}
+            onDelete={() => {
+              if (confirm(`Удалить проект «${p.name}» со всеми сериями и заметками?`)) {
+                deleteProject.mutate(p.id);
+              }
+            }}
           />
         ))}
       </nav>
@@ -80,22 +94,34 @@ function ProjectRow({
   icon,
   label,
   onClick,
+  onDelete,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  onDelete?: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <div
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
+        "group flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
         active ? "bg-primary/15 text-primary" : "hover:bg-accent/60",
       )}
     >
-      {icon}
-      <span className="truncate">{label}</span>
-    </button>
+      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        {icon}
+        <span className="truncate">{label}</span>
+      </button>
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          aria-label="Удалить проект"
+          className="text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
   );
 }

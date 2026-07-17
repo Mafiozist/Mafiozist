@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Trash2, Clock, GripVertical, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Clock, GripVertical, Pencil, Check, X, Download } from "lucide-react";
 import { notesApi } from "@/api/notes";
 import { queryKeys } from "@/api/queryKeys";
 import { useUiStore } from "@/stores/uiStore";
@@ -30,6 +30,29 @@ import { Card } from "@/components/ui/Card";
 import { SeriesTagsBar } from "@/features/tags/SeriesTagsBar";
 
 const CONTENT_TYPES: ContentType[] = ["markdown", "code", "image", "link"];
+
+/** Собирает Markdown-документ из блоков серии. */
+function blocksToMarkdown(blocks: NoteContent[]): string {
+  return blocks
+    .map((b) => {
+      const heading = b.title ? `## ${b.title}\n\n` : "";
+      if (b.type === "code") return `${heading}\`\`\`\n${b.text}\n\`\`\``;
+      if (b.type === "link") return `${heading}<${b.text}>`;
+      return `${heading}${b.text}`;
+    })
+    .join("\n\n");
+}
+
+/** Скачивает текст как файл (работает и в браузере, и в webview Tauri). */
+function downloadText(filename: string, content: string): void {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function BlockEditor() {
   const qc = useQueryClient();
@@ -114,6 +137,18 @@ export function BlockEditor() {
   return (
     <main className="flex flex-1 flex-col overflow-hidden">
       <SeriesTagsBar seriesId={seriesId} />
+
+      {/* Тулбар серии */}
+      <div className="flex items-center justify-end border-b bg-card/20 px-6 py-1.5">
+        <button
+          onClick={() => downloadText(`series-${seriesId}.md`, blocksToMarkdown(orderedBlocks))}
+          disabled={orderedBlocks.length === 0}
+          className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/60 disabled:opacity-40"
+        >
+          <Download size={13} />
+          Экспорт .md
+        </button>
+      </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-6">
         {orderedBlocks.length === 0 && (

@@ -1,7 +1,7 @@
 // Средняя панель: список серий выбранного проекта + создание.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus } from "lucide-react";
+import { Layers, Plus, Trash2 } from "lucide-react";
 import { notesApi } from "@/api/notes";
 import { queryKeys } from "@/api/queryKeys";
 import { useUiStore } from "@/stores/uiStore";
@@ -30,6 +30,14 @@ export function SeriesList() {
     },
   });
 
+  const deleteSeries = useMutation({
+    mutationFn: (id: string) => notesApi.deleteSeries(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: queryKeys.series(projectId) });
+      if (selectedSeriesId === id) selectSeries(null);
+    },
+  });
+
   const submit = () => {
     const trimmed = title.trim();
     if (trimmed) createSeries.mutate(trimmed);
@@ -50,18 +58,30 @@ export function SeriesList() {
         )}
         {series.map((s) => (
           <li key={s.id}>
-            <button
-              onClick={() => selectSeries(s.id)}
+            <div
               className={cn(
-                "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
+                "group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                 selectedSeriesId === s.id ? "bg-primary/15 text-primary" : "hover:bg-accent/60",
               )}
             >
-              <div className="truncate font-medium">{s.title}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {new Date(s.created_at).toLocaleString("ru-RU")}
-              </div>
-            </button>
+              <button onClick={() => selectSeries(s.id)} className="min-w-0 flex-1 text-left">
+                <div className="truncate font-medium">{s.title}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {new Date(s.created_at).toLocaleString("ru-RU")}
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`Удалить серию «${s.title}» со всеми блоками?`)) {
+                    deleteSeries.mutate(s.id);
+                  }
+                }}
+                aria-label="Удалить серию"
+                className="text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           </li>
         ))}
       </ul>
